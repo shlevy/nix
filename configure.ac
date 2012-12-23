@@ -370,6 +370,7 @@ AC_CONFIG_FILES([Makefile
    src/nix-env/Makefile
    src/nix-daemon/Makefile
    src/nix-setuid-helper/Makefile
+   src/nix-impurity-helper/Makefile
    src/nix-log2xml/Makefile
    src/bsdiff-4.3/Makefile
    perl/Makefile

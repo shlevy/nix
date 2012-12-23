@@ -45,6 +45,7 @@ Settings::Settings()
     gcKeepDerivations = true;
     autoOptimiseStore = false;
     envKeepDerivations = false;
+    impureCommandsDir = "/var/empty";
 }
 
 
@@ -136,6 +137,7 @@ void Settings::update()
     get(gcKeepDerivations, "gc-keep-derivations");
     get(autoOptimiseStore, "auto-optimise-store");
     get(envKeepDerivations, "env-keep-derivations");
+    get(impureCommandsDir, "impure-commands-dir");
 }
 
 

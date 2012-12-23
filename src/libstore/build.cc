@@ -26,6 +26,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <cstring>
+#include <sys/socket.h>
 
 #include <pwd.h>
 #include <grp.h>
@@ -47,7 +48,6 @@
 #define CHROOT_ENABLED HAVE_CHROOT && HAVE_UNSHARE && HAVE_SYS_MOUNT_H && defined(MS_BIND) && defined(MS_PRIVATE) && defined(CLONE_NEWNS)
 
 #if CHROOT_ENABLED
-#include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <net/if.h>
 #include <netinet/ip.h>
@@ -831,6 +831,12 @@ private:
        exit code, but ah well.) */
     const static int childSetupFailed = 189;
 
+    /* Whether the impurity socket is available */
+    bool useImpurityHelper;
+
+    /* The socket to the impurity helper */
+    AutoCloseFD impuritySocketClient;
+
 public:
     DerivationGoal(const Path & drvPath, const StringSet & wantedOutputs, Worker & worker, bool repair = false);
     ~DerivationGoal();
@@ -908,6 +914,7 @@ DerivationGoal::DerivationGoal(const Path & drvPath, const StringSet & wantedOut
     , fLogFile(0)
     , bzLogFile(0)
     , useChroot(false)
+    , useImpurityHelper(false)
     , repair(repair)
 {
     this->drvPath = drvPath;
@@ -1819,6 +1826,8 @@ void DerivationGoal::startBuilder()
     /* Hack to allow derivations to disable chroot builds. */
     if (drv.env["__noChroot"] == "1") useChroot = false;
 
+    if (drv.env["__useImpurityHelper"] == "1") useImpurityHelper = true;
+
     if (useChroot) {
 #if CHROOT_ENABLED
         /* Create a temporary directory in which we set up the chroot
@@ -1941,6 +1950,58 @@ void DerivationGoal::startBuilder()
                     redirectedBadOutputs[*i] = addHashRewrite(*i);
     }
 
+    if (useImpurityHelper) {
+        /* Start the impurity helper */
+        int impuritySockets[2];
+        AutoCloseFD impuritySocketMaster;
+        int res = socketpair(AF_UNIX, SOCK_STREAM, 0, impuritySockets);
+        impuritySocketMaster = impuritySockets[0];
+        impuritySocketClient = impuritySockets[1];
+
+        Pid impurityChild;
+        impurityChild = fork();
+
+        switch (impurityChild) {
+            case -1:
+                throw SysError("unable to fork");
+
+            case 0:
+                try {
+                    Pid impurityGrandchild;
+                    impurityGrandchild = fork();
+                    switch (impurityGrandchild) {
+                        case -1:
+                            throw SysError("unable to fork");
+
+                        case 0:
+                            try {
+                                set<int> fds;
+                                dup2(impuritySocketMaster, 3);
+                                fds.insert(3);
+                                closeMostFDs(fds);
+
+                                char * * argv = new char * [6];
+                                argv[0] = (char *) (settings.nixLibexecDir + "/nix-impurity-helper").c_str();
+                                argv[1] = (char *) drvPath.c_str();
+                                argv[2] = (char *) tmpDir.c_str();
+                                argv[3] = (char *) chrootRootDir.c_str();
+                                argv[4] = (char *) settings.impureCommandsDir.c_str();
+                                argv[5] = 0;
+                                restoreSIGPIPE();
+                                execv(argv[0], argv);
+                                throw SysError("execve");
+                            } catch (std::exception & e) {
+                                writeToStderr("child error: " + string(e.what()) + "\n");
+                            }
+                            _exit(1);
+                    }
+                } catch (std::exception & e) {
+                    writeToStderr("child error: " + string(e.what()) + "\n");
+                }
+                _exit(1);
+        }
+        impurityChild.wait(true);
+    }
 
     /* Run the builder. */
     printMsg(lvlChatty, format("executing builder `%1%'") %
@@ -2093,8 +2154,17 @@ void DerivationGoal::initChild()
         if (chdir(tmpDir.c_str()) == -1)
             throw SysError(format("changing into `%1%'") % tmpDir);
 
+        set<int> fds;
+        if (useImpurityHelper) {
+            int dupedSocket = dup(impuritySocketClient);
+            if (dupedSocket == -1)
+                throw SysError("dup'ing the impurity helper socket");
+            fds.insert(dupedSocket);
+            env["NIX_IMPURITY_SOCKET"] = int2String(dupedSocket);
+        }
+
         /* Close all other file descriptors. */
-        closeMostFDs(set<int>());
+        closeMostFDs(fds);
 
 #ifdef CAN_DO_LINUX32_BUILDS
         /* Change the personality to 32-bit if we're doing an

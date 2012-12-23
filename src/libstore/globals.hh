@@ -176,6 +176,9 @@ struct Settings {
        (to prevent them from being GCed). */
     bool envKeepDerivations;
 
+    /* Where the trusted impure commands can be found */
+    Path impureCommandsDir;
+
 private:
     SettingsMap settings, overrides;
 
