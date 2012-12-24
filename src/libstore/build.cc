@@ -1967,8 +1967,7 @@ void DerivationGoal::startBuilder()
 
             case 0:
                 try {
-                    Pid impurityGrandchild;
-                    impurityGrandchild = fork();
+                    pid_t impurityGrandchild = fork();
                     switch (impurityGrandchild) {
                         case -1:
                             throw SysError("unable to fork");
