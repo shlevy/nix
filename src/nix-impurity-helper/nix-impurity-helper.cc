@@ -112,7 +112,7 @@ static Path commandsDir;
 static void processRequest(AutoCloseFD socket_fd) {
     unsigned char buf;
     Path name = commandsDir + '/';
-    int argc;
+    int argc, client_argc;
 
     FdSource socket(socket_fd);
 
@@ -126,14 +126,15 @@ static void processRequest(AutoCloseFD socket_fd) {
             name.push_back(buf);
     }
 
-    socket.read((unsigned char *) &argc, sizeof argc);
-    std::vector<string> args(argc + 4);
+    socket.read((unsigned char *) &client_argc, sizeof client_argc);
+    argc = client_argc + 4;
+    std::vector<string> args(argc);
 
-    args.push_back(name);
-    args.push_back(drvFile);
-    args.push_back(tmpDir);
-    args.push_back(chrootDir);
-    while (argc--) {
+    args[0] = name;
+    args[1] = drvFile;
+    args[2] = tmpDir;
+    args[3] = chrootDir;
+    for (client_argc; client_argc; client_argc--) {
         string arg;
 
         while (socket.read(&buf, sizeof buf)) {
@@ -142,7 +143,7 @@ static void processRequest(AutoCloseFD socket_fd) {
             arg.push_back(buf);
         }
 
-        args.push_back(arg);
+        args[argc-client_argc] = arg;
     }
 
     Pipe in;
@@ -169,29 +170,24 @@ static void processRequest(AutoCloseFD socket_fd) {
         throw SysError("unable to fork");
 
     case 0:
-        try { /* child */
-            error_comm.readSide.close();
-            dup2(in.readSide, 0);
-            dup2(out.writeSide, 1);
-            dup2(err.writeSide, 2);
+        error_comm.readSide.close();
+        dup2(in.readSide, STDIN_FILENO);
+        dup2(out.writeSide, STDOUT_FILENO);
+        dup2(err.writeSide, STDERR_FILENO);
 
-            char * * argv = new char * [args.size() + 1];
-            for (; argc < args.size(); argc++) {
-                argv[argc] = (char *) args[argc].c_str();
-            }
-            argv[argc] = NULL;
-
-            execv(name.c_str(), argv);
-            delete [] argv;
-            throw SysError("executing");
-        } catch (std::exception & e) {
-            writeToStderr("child error: " + string(e.what()) + "\n");
+        char * * argv = new char * [argc + 1];
+        argv[argc] = NULL;
+        for (argc--; argc >= 0; argc--) {
+            argv[argc] = (char *) args[argc].c_str();
         }
+
+        execv(name.c_str(), argv);
+        delete [] argv;
         char zero = 0;
         write(socket_fd, &zero, sizeof zero);
         write(socket_fd, &errno, sizeof errno);
         write(error_comm.writeSide, &buf, sizeof buf);
-        exit(1);
+        _exit(1);
     }
 
     error_comm.writeSide.close();
@@ -232,8 +228,11 @@ static void run(int argc, char * * argv)
         ssize_t count = read(fdSocket, &ignored, sizeof ignored);
         if (count == 0)
             exit(0);
-        else if (count == -1)
+        else if (count == -1) {
+            if (errno == EINTR)
+                continue;
             throw SysError("Reading master socket");
+        }
 
         /* Create and send a processing socket */
         int res = socketpair(AF_UNIX, SOCK_STREAM, 0, sockets);
@@ -275,7 +274,7 @@ int main(int argc, char * * argv)
     try {
         run(argc, argv);
     } catch (Error & e) {
-        writeToStderr(e.msg() + "\n");
+        writeToStderr("Error: " + e.msg() + "\n");
         return 1;
     }
 }
