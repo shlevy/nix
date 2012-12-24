@@ -10,7 +10,7 @@ TESTS = init.sh hash.sh lang.sh add.sh simple.sh dependencies.sh \
   remote-store.sh export.sh export-graph.sh negative-caching.sh \
   binary-patching.sh timeout.sh secure-drv-outputs.sh nix-channel.sh \
   multiple-outputs.sh import-derivation.sh fetchurl.sh optimise-store.sh \
-  binary-cache.sh nix-profile.sh
+  binary-cache.sh nix-profile.sh trusted-impurity-helper.sh
 
 XFAIL_TESTS =
 
@@ -40,6 +40,7 @@ EXTRA_DIST = $(TESTS) \
   multiple-outputs.nix \
   import-derivation.nix \
   fetchurl.nix \
+  impure-command.sh trusted-impurity-helper.nix trusted-impurity-helper.sh trusted-impurity-helper-builder \
   $(wildcard lang/*.nix) $(wildcard lang/*.exp) $(wildcard lang/*.exp.xml) $(wildcard lang/*.flags) $(wildcard lang/dir*/*.nix) \
   common.sh.in
 
@@ -48,3 +49,7 @@ check-am:
 	@echo "Warning: Nix has no 'make check'. Please install Nix and run 'make installcheck' instead."
 
 installcheck: check-TESTS
+
+check_PROGRAMS = trusted-impurity-helper-builder
+
+check_SOURCES = trusted-impurity-helper-builder.c
