@@ -166,6 +166,15 @@ int main(int argc, char * * argv) {
 		return 1;
 	}
 	assert(buf == 0);
+	res = read(child_fd, &buf, sizeof buf);
+	if (res == 0) {
+		fprintf(stderr, "Unexpected EOF");
+		return 1;
+	} else if (res < 0) {
+		perror("Reading exit status");
+		return 1;
+	}
+	assert(buf == 0);
 	assert(read(child_fd, &buf, sizeof buf) == 0);
 
 	return 0;

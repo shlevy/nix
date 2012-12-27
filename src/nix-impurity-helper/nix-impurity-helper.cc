@@ -108,6 +108,7 @@ static Path chrootDir;
 static Path commandsDir;
 
 static void processRequest(AutoCloseFD socket_fd) {
+    char normal_exit = 0, signal_exit = 1, failed_execve_exit = 2;
     unsigned char buf;
     Path name = commandsDir + '/';
 
@@ -184,8 +185,7 @@ static void processRequest(AutoCloseFD socket_fd) {
 
         execv(name.c_str(), argv);
         delete [] argv;
-        char zero = 0;
-        write(socket_fd, &zero, sizeof zero);
+        write(socket_fd, &failed_execve_exit, sizeof failed_execve_exit);
         write(socket_fd, &errno, sizeof errno);
         write(error_comm.writeSide, &buf, sizeof buf);
         _exit(1);
@@ -197,13 +197,13 @@ static void processRequest(AutoCloseFD socket_fd) {
     if (WIFEXITED(status)) {
         if (!read(error_comm.readSide, &buf, sizeof buf)) {
             char exit = WEXITSTATUS(status);
+            write(socket_fd, &normal_exit, sizeof normal_exit);
             write(socket_fd, &exit, sizeof exit);
         }
     }
     else if (WIFSIGNALED(status)) {
-        char one = 1;
         int sig = WTERMSIG(status);
-        write(socket_fd, &one, sizeof one);
+        write(socket_fd, &signal_exit, sizeof signal_exit);
         write(socket_fd, &sig, sizeof sig);
     }
 }
