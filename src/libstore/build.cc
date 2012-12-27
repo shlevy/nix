@@ -1975,17 +1975,18 @@ void DerivationGoal::startBuilder()
                         case 0:
                             try {
                                 set<int> fds;
-                                dup2(impuritySocketMaster, 3);
-                                fds.insert(3);
+                                int masterSocket = dup(impuritySocketMaster);
+                                fds.insert(masterSocket);
                                 closeMostFDs(fds);
 
-                                char * * argv = new char * [6];
+                                char * argv[7];
                                 argv[0] = (char *) (settings.nixLibexecDir + "/nix-impurity-helper").c_str();
-                                argv[1] = (char *) drvPath.c_str();
-                                argv[2] = (char *) tmpDir.c_str();
-                                argv[3] = (char *) chrootRootDir.c_str();
-                                argv[4] = (char *) settings.impureCommandsDir.c_str();
-                                argv[5] = 0;
+                                argv[1] = int2String(masterSocket);
+                                argv[2] = (char *) drvPath.c_str();
+                                argv[3] = (char *) tmpDir.c_str();
+                                argv[4] = (char *) chrootRootDir.c_str();
+                                argv[5] = (char *) settings.impureCommandsDir.c_str();
+                                argv[6] = 0;
                                 restoreSIGPIPE();
                                 execv(argv[0], argv);
                                 throw SysError("execve");

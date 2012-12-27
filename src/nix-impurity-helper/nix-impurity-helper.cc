@@ -12,8 +12,6 @@
 #include <sys/uio.h>
 #include <errno.h>
 
-#define SOCKET_FD 3
-
 /*
  * The following macros and the sendfd function are from plan9port
  * (http://code.swtch.com/plan9port/src/318b2fddcd9a/src/lib9/sendfd.c)
@@ -209,12 +207,12 @@ static void processRequest(AutoCloseFD socket_fd) {
 
 static void run(int argc, char * * argv) 
 {
-    drvFile = argv[1];
-    tmpDir = argv[2];
-    chrootDir = argv[3];
-    commandsDir = argv[4];
+    AutoCloseFD fdSocket = atoi(argv[1]);
+    drvFile = argv[2];
+    tmpDir = argv[3];
+    chrootDir = argv[4];
+    commandsDir = argv[5];
 
-    AutoCloseFD fdSocket = SOCKET_FD;
     closeOnExec(fdSocket);
 
     setSigChldAction(true);
