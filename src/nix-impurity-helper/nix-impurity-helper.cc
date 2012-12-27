@@ -110,7 +110,6 @@ static Path commandsDir;
 static void processRequest(AutoCloseFD socket_fd) {
     unsigned char buf;
     Path name = commandsDir + '/';
-    int argc, client_argc;
 
     FdSource socket(socket_fd);
 
@@ -124,24 +123,26 @@ static void processRequest(AutoCloseFD socket_fd) {
             name.push_back(buf);
     }
 
-    socket.read((unsigned char *) &client_argc, sizeof client_argc);
-    argc = client_argc + 4;
-    std::vector<string> args(argc);
+    std::vector<string> args(4);
 
     args[0] = name;
     args[1] = drvFile;
     args[2] = tmpDir;
     args[3] = chrootDir;
-    for (client_argc; client_argc; client_argc--) {
-        string arg;
 
+    try {
         while (socket.read(&buf, sizeof buf)) {
-            if (!buf)
-                break;
-            arg.push_back(buf);
-        }
+            string arg;
 
-        args[argc-client_argc] = arg;
+            do {
+                if (!buf)
+                    break;
+                arg.push_back(buf);
+            } while (socket.read(&buf, sizeof buf));
+
+            args.push_back(arg);
+        }
+    } catch (EndOfFile e) {
     }
 
     Pipe in;
@@ -168,6 +169,7 @@ static void processRequest(AutoCloseFD socket_fd) {
         throw SysError("unable to fork");
 
     case 0:
+        std::vector<string>::size_type argc = args.size();
         error_comm.readSide.close();
         dup2(in.readSide, STDIN_FILENO);
         dup2(out.writeSide, STDOUT_FILENO);
@@ -175,9 +177,10 @@ static void processRequest(AutoCloseFD socket_fd) {
 
         char * * argv = new char * [argc + 1];
         argv[argc] = NULL;
-        for (argc--; argc >= 0; argc--) {
+        for (argc--; argc; argc--) {
             argv[argc] = (char *) args[argc].c_str();
         }
+        argv[argc] = (char *) args[argc].c_str();
 
         execv(name.c_str(), argv);
         delete [] argv;

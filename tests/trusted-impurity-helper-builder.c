@@ -83,7 +83,6 @@ static int recvfd(int s) {
 
 int main(int argc, char * * argv) {
 	char buf = 'a';
-	int arg_count = 2;
 	size_t read_count;
 	ssize_t res;
 	int stdin_write, stderr_read, stdout_read;
@@ -109,10 +108,6 @@ int main(int argc, char * * argv) {
 		perror("Writing command");
 		return 1;
 	}
-	if (write(child_fd, &arg_count, sizeof arg_count) < 0) {
-		perror("Writing command");
-		return 1;
-	}
 	if (write(child_fd, "arg1", sizeof "arg1") < 0) {
 		perror("Writing command");
 		return 1;
@@ -122,6 +117,10 @@ int main(int argc, char * * argv) {
 		return 1;
 	}
 
+	if (shutdown(child_fd, SHUT_WR) < 0) {
+		perror("Shutting down socket write side");
+		return 1;
+	}
 	stdin_write = recvfd(child_fd);
 	stdout_read = recvfd(child_fd);
 	stderr_read = recvfd(child_fd);
