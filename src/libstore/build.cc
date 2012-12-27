@@ -1979,16 +1979,16 @@ void DerivationGoal::startBuilder()
                                 fds.insert(masterSocket);
                                 closeMostFDs(fds);
 
-                                char * argv[7];
-                                argv[0] = (char *) (settings.nixLibexecDir + "/nix-impurity-helper").c_str();
-                                argv[1] = int2String(masterSocket);
-                                argv[2] = (char *) drvPath.c_str();
-                                argv[3] = (char *) tmpDir.c_str();
-                                argv[4] = (char *) chrootRootDir.c_str();
-                                argv[5] = (char *) settings.impureCommandsDir.c_str();
+                                char const * argv[7];
+                                argv[0] = (settings.nixLibexecDir + "/nix-impurity-helper").c_str();
+                                argv[1] = int2String(masterSocket).c_str();
+                                argv[2] = drvPath.c_str();
+                                argv[3] = tmpDir.c_str();
+                                argv[4] = chrootRootDir.c_str();
+                                argv[5] = settings.impureCommandsDir.c_str();
                                 argv[6] = 0;
                                 restoreSIGPIPE();
-                                execv(argv[0], argv);
+                                execv(argv[0], (char * const *) argv);
                                 throw SysError("execve");
                             } catch (std::exception & e) {
                                 writeToStderr("child error: " + string(e.what()) + "\n");
