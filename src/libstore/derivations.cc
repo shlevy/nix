@@ -252,6 +252,46 @@ Hash hashDerivationModulo(StoreAPI & store, OldDerivation drv)
 }
 
 
+Hash hashDerivation(Derivation drv)
+{
+    string s;
+    s.reserve(65536);
+    s += "Derive([";
+
+    bool first = true;
+    foreach (DerivationOutputs::const_iterator, i, drv.outputs) {
+        if (first) first = false; else s += ',';
+        s += '('; printString(s, i->first);
+        if (i->second.fixedOutput) {
+            s += ','; printString(s, i->second.recursive ? "recursive" : "flat");
+            s += ','; printString(s, printHashType(i->second.hash.type));
+            s += ','; printString(s, printHash(i->second.hash));
+        }
+        s += ')';
+    }
+
+    s += "],";
+    printStrings(s, drv.inputs.begin(), drv.inputs.end());
+
+    s += ','; printString(s, drv.platform);
+    s += ','; printString(s, drv.builder);
+    s += ','; printStrings(s, drv.args.begin(), drv.args.end());
+
+    s += ",[";
+    first = true;
+    foreach (StringPairs::const_iterator, i, drv.env) {
+        if (first) first = false; else s += ',';
+        s += '('; printString(s, i->first);
+        s += ','; printString(s, i->second);
+        s += ')';
+    }
+
+    s += "])";
+
+    return hashString(htSHA256, s);
+}
+
+
 DrvPathWithOutputs parseDrvPathWithOutputs(const string & s)
 {
     size_t n = s.find("!");

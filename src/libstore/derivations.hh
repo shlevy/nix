@@ -103,6 +103,9 @@ bool isFixedOutputDrv(const OldDerivation & drv);
 
 Hash hashDerivationModulo(StoreAPI & store, OldDerivation drv);
 
+/* Return a canonical hash of the Derivation */
+Hash hashDerivation(Derivation drv);
+
 /* Memoisation of hashDerivationModulo(). */
 typedef std::map<Path, Hash> DrvHashes;
 
