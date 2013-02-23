@@ -239,7 +239,7 @@ SV * derivationFromPath(char * drvPath)
             hash = newHV();
 
             HV * outputs = newHV();
-            for (DerivationOutputs::iterator i = drv.outputs.begin(); i != drv.outputs.end(); ++i)
+            for (OldDerivationOutputs::iterator i = drv.outputs.begin(); i != drv.outputs.end(); ++i)
                 hv_store(outputs, i->first.c_str(), i->first.size(), newSVpv(i->second.path.c_str(), 0), 0);
             hv_stores(hash, "outputs", newRV((SV *) outputs));
 

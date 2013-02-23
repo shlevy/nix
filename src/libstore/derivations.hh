@@ -32,7 +32,7 @@ struct DerivationOutput
     void parseHashInfo(bool & recursive, HashType & hashType, Hash & hash) const;
 };
 
-typedef std::map<string, DerivationOutput> DerivationOutputs;
+typedef std::map<string, DerivationOutput> OldDerivationOutputs;
 
 /* For inputs that are sub-derivations, we specify exactly which
    output IDs we are interested in. */
@@ -42,7 +42,7 @@ typedef std::map<string, string> StringPairs;
 
 struct OldDerivation
 {
-    DerivationOutputs outputs; /* keyed on symbolic IDs */
+    OldDerivationOutputs outputs; /* keyed on symbolic IDs */
     DerivationInputs inputDrvs; /* inputs that are sub-derivations */
     PathSet inputSrcs; /* inputs that are sources */
     string platform;

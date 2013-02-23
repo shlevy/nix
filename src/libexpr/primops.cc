@@ -74,7 +74,7 @@ static void prim_import(EvalState & state, Value * * args, Value & v)
         unsigned int outputs_index = 0;
 
         Value * outputsVal = w.attrs->find(state.symbols.create("outputs"))->value;
-        foreach (DerivationOutputs::iterator, i, drv.outputs) {
+        foreach (OldDerivationOutputs::iterator, i, drv.outputs) {
             mkString(*state.allocAttr(w, state.symbols.create(i->first)),
                 i->second.path, singleton<PathSet>("!" + i->first + "!" + path));
             mkString(*(outputsVal->list.elems[outputs_index++] = state.allocValue()),
@@ -490,7 +490,7 @@ static void prim_derivationStrict(EvalState & state, Value * * args, Value & v)
            path. */
         Hash h = hashDerivationModulo(*store, drv);
 
-        foreach (DerivationOutputs::iterator, i, drv.outputs)
+        foreach (OldDerivationOutputs::iterator, i, drv.outputs)
             if (i->second.path == "") {
                 Path outPath = makeOutputPath(i->first, h, drvName);
                 drv.env[i->first] = outPath;
@@ -511,7 +511,7 @@ static void prim_derivationStrict(EvalState & state, Value * * args, Value & v)
 
     state.mkAttrs(v, 1 + drv.outputs.size());
     mkString(*state.allocAttr(v, state.sDrvPath), drvPath, singleton<PathSet>("=" + drvPath));
-    foreach (DerivationOutputs::iterator, i, drv.outputs) {
+    foreach (OldDerivationOutputs::iterator, i, drv.outputs) {
         mkString(*state.allocAttr(v, state.symbols.create(i->first)),
             i->second.path, singleton<PathSet>("!" + i->first + "!" + drvPath));
     }

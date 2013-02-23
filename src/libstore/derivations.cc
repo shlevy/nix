@@ -145,7 +145,7 @@ string unparseDerivation(const OldDerivation & drv)
     s += "Derive([";
 
     bool first = true;
-    foreach (DerivationOutputs::const_iterator, i, drv.outputs) {
+    foreach (OldDerivationOutputs::const_iterator, i, drv.outputs) {
         if (first) first = false; else s += ',';
         s += '('; printString(s, i->first);
         s += ','; printString(s, i->second.path);
@@ -226,7 +226,7 @@ Hash hashDerivationModulo(StoreAPI & store, OldDerivation drv)
 {
     /* Return a fixed hash for fixed-output derivations. */
     if (isFixedOutputDrv(drv)) {
-        DerivationOutputs::const_iterator i = drv.outputs.begin();
+        OldDerivationOutputs::const_iterator i = drv.outputs.begin();
         return hashString(htSHA256, "fixed:out:"
             + i->second.hashAlgo + ":"
             + i->second.hash + ":"

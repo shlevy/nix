@@ -68,11 +68,11 @@ static PathSet realisePath(const Path & path, bool build = true)
         rootNr++;
 
         if (p.second.empty())
-            foreach (DerivationOutputs::iterator, i, drv.outputs) p.second.insert(i->first);
+            foreach (OldDerivationOutputs::iterator, i, drv.outputs) p.second.insert(i->first);
 
         PathSet outputs;
         foreach (StringSet::iterator, j, p.second) {
-            DerivationOutputs::iterator i = drv.outputs.find(*j);
+            OldDerivationOutputs::iterator i = drv.outputs.find(*j);
             if (i == drv.outputs.end())
                 throw Error(format("derivation `%1%' does not have an output named `%2%'") % p.first % *j);
             Path outPath = i->second.path;
@@ -207,7 +207,7 @@ static PathSet maybeUseOutputs(const Path & storePath, bool useOutput, bool forc
     if (useOutput && isDerivation(storePath)) {
         OldDerivation drv = derivationFromPath(*store, storePath);
         PathSet outputs;
-        foreach (DerivationOutputs::iterator, i, drv.outputs)
+        foreach (OldDerivationOutputs::iterator, i, drv.outputs)
             outputs.insert(i->second.path);
         return outputs;
     }
@@ -304,7 +304,7 @@ static void opQuery(Strings opFlags, Strings opArgs)
                 *i = followLinksToStorePath(*i);
                 if (forceRealise) realisePath(*i);
                 OldDerivation drv = derivationFromPath(*store, *i);
-                foreach (DerivationOutputs::iterator, j, drv.outputs)
+                foreach (OldDerivationOutputs::iterator, j, drv.outputs)
                     cout << format("%1%\n") % j->second.path;
             }
             break;

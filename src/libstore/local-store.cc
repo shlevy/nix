@@ -416,13 +416,13 @@ void LocalStore::openDB(bool create)
     // If the path is a derivation, then clear its outputs.
     stmtClearFailedPath.create(db,
         "delete from FailedPaths where ?1 = '*' or path = ?1 "
-        "or path in (select d.path from DerivationOutputs d join ValidPaths v on d.drv = v.id where v.path = ?1);");
+        "or path in (select d.path from OldDerivationOutputs d join ValidPaths v on d.drv = v.id where v.path = ?1);");
     stmtAddDerivationOutput.create(db,
-        "insert or replace into DerivationOutputs (drv, id, path) values (?, ?, ?);");
+        "insert or replace into OldDerivationOutputs (drv, id, path) values (?, ?, ?);");
     stmtQueryValidDerivers.create(db,
-        "select v.id, v.path from DerivationOutputs d join ValidPaths v on d.drv = v.id where d.path = ?;");
+        "select v.id, v.path from OldDerivationOutputs d join ValidPaths v on d.drv = v.id where d.path = ?;");
     stmtQueryDerivationOutputs.create(db,
-        "select id, path from DerivationOutputs where drv = ?;");
+        "select id, path from OldDerivationOutputs where drv = ?;");
     // Use "path >= ?" with limit 1 rather than "path like '?%'" to
     // ensure efficient lookup.
     stmtQueryPathFromHashPart.create(db,
@@ -558,7 +558,7 @@ void LocalStore::checkDerivationOutputs(const Path & drvPath, const OldDerivatio
     drvName = string(drvName, 0, drvName.size() - drvExtension.size());
 
     if (isFixedOutputDrv(drv)) {
-        DerivationOutputs::const_iterator out = drv.outputs.find("out");
+        OldDerivationOutputs::const_iterator out = drv.outputs.find("out");
         if (out == drv.outputs.end())
             throw Error(format("derivation `%1%' does not have an output named `out'") % drvPath);
 
@@ -574,14 +574,14 @@ void LocalStore::checkDerivationOutputs(const Path & drvPath, const OldDerivatio
 
     else {
         OldDerivation drvCopy(drv);
-        foreach (DerivationOutputs::iterator, i, drvCopy.outputs) {
+        foreach (OldDerivationOutputs::iterator, i, drvCopy.outputs) {
             i->second.path = "";
             drvCopy.env[i->first] = "";
         }
 
         Hash h = hashDerivationModulo(*this, drvCopy);
 
-        foreach (DerivationOutputs::const_iterator, i, drv.outputs) {
+        foreach (OldDerivationOutputs::const_iterator, i, drv.outputs) {
             Path outPath = makeOutputPath(i->first, h, drvName);
             StringPairs::const_iterator j = drv.env.find(i->first);
             if (i->second.path != outPath || j == drv.env.end() || j->second != outPath)
@@ -624,7 +624,7 @@ unsigned long long LocalStore::addValidPath(const ValidPathInfo & info, bool che
            registration above is undone. */
         if (checkOutputs) checkDerivationOutputs(info.path, drv);
 
-        foreach (DerivationOutputs::iterator, i, drv.outputs) {
+        foreach (OldDerivationOutputs::iterator, i, drv.outputs) {
             SQLiteStmtUse use(stmtAddDerivationOutput);
             stmtAddDerivationOutput.bind(id);
             stmtAddDerivationOutput.bind(i->first);

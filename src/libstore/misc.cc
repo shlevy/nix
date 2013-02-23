@@ -61,7 +61,7 @@ void computeFSClosure(StoreAPI & store, const Path & path,
 
 Path findOutput(const OldDerivation & drv, string id)
 {
-    foreach (DerivationOutputs::const_iterator, i, drv.outputs)
+    foreach (OldDerivationOutputs::const_iterator, i, drv.outputs)
         if (i->first == id) return i->second.path;
     throw Error(format("derivation has no output `%1%'") % id);
 }
@@ -113,7 +113,7 @@ void queryMissing(StoreAPI & store, const PathSet & targets,
                 OldDerivation drv = derivationFromPath(store, i2.first);
 
                 PathSet invalid;
-                foreach (DerivationOutputs::iterator, j, drv.outputs)
+                foreach (OldDerivationOutputs::iterator, j, drv.outputs)
                     if (wantOutput(j->first, i2.second)
                         && !store.isValidPath(j->second.path))
                         invalid.insert(j->second.path);
@@ -144,7 +144,7 @@ void queryMissing(StoreAPI & store, const PathSet & targets,
             PathSet outputs;
             bool mustBuild = false;
             if (settings.useSubstitutes) {
-                foreach (DerivationOutputs::iterator, j, drv.outputs) {
+                foreach (OldDerivationOutputs::iterator, j, drv.outputs) {
                     if (!wantOutput(j->first, i2.second)) continue;
                     if (!store.isValidPath(j->second.path)) {
                         if (infos.find(j->second.path) == infos.end())
