@@ -65,7 +65,7 @@ public:
 
     Paths importPaths(bool requireSignature, Source & source);
     
-    void buildPaths(const PathSet & paths, bool repair = false);
+    void buildPaths(const PathSet & paths, DerivablePaths derivablePaths, bool repair = false);
 
     void ensurePath(const Path & path);
 

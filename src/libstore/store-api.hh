@@ -2,6 +2,7 @@
 
 #include "hash.hh"
 #include "serialise.hh"
+#include "derivations.hh"
 
 #include <string>
 #include <map>
@@ -182,15 +183,15 @@ public:
        the Nix store. */
     virtual Paths importPaths(bool requireSignature, Source & source) = 0;
 
-    /* For each path, if it's a derivation, build it.  Building a
-       derivation means ensuring that the output paths are valid.  If
-       they are already valid, this is a no-op.  Otherwise, validity
+    /* For each path, if it's a derivation or in DerivablePaths, build it.
+       Building a derivation means ensuring that the output paths are valid.
+       If they are already valid, this is a no-op.  Otherwise, validity
        can be reached in two ways.  First, if the output paths is
        substitutable, then build the path that way.  Second, the
        output paths can be created by running the builder, after
        recursively building any sub-derivations. For inputs that are
-       not derivations, substitute them. */
-    virtual void buildPaths(const PathSet & paths, bool repair = false) = 0;
+       not derivations or in DerivablePaths, substitute them. */
+    virtual void buildPaths(const PathSet & paths, DerivablePaths derivablePaths, bool repair = false) = 0;
 
     /* Ensure that a path is valid.  If it is not currently valid, it
        may be made valid by running a substitute (if defined for the

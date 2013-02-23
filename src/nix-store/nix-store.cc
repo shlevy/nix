@@ -63,7 +63,7 @@ static PathSet realisePath(const Path & path, bool build = true)
     DrvPathWithOutputs p = parseDrvPathWithOutputs(path);
 
     if (isDerivation(p.first)) {
-        if (build) store->buildPaths(singleton<PathSet>(path));
+        if (build) store->buildPaths(singleton<PathSet>(path), DerivablePaths());
         OldDerivation drv = derivationFromPath(*store, p.first);
         rootNr++;
 
@@ -134,7 +134,7 @@ static void opRealise(Strings opFlags, Strings opArgs)
     if (dryRun) return;
 
     /* Build all paths at the same time to exploit parallelism. */
-    store->buildPaths(PathSet(paths.begin(), paths.end()), repair);
+    store->buildPaths(PathSet(paths.begin(), paths.end()), DerivablePaths(), repair);
 
     if (!ignoreUnknown)
         foreach (Paths::iterator, i, paths) {
