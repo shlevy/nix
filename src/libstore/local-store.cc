@@ -416,13 +416,13 @@ void LocalStore::openDB(bool create)
     // If the path is a derivation, then clear its outputs.
     stmtClearFailedPath.create(db,
         "delete from FailedPaths where ?1 = '*' or path = ?1 "
-        "or path in (select d.path from OldDerivationOutputs d join ValidPaths v on d.drv = v.id where v.path = ?1);");
+        "or path in (select d.path from DerivationOutputs d join ValidPaths v on d.drv = v.id where v.path = ?1);");
     stmtAddDerivationOutput.create(db,
-        "insert or replace into OldDerivationOutputs (drv, id, path) values (?, ?, ?);");
+        "insert or replace into DerivationOutputs (drv, id, path) values (?, ?, ?);");
     stmtQueryValidDerivers.create(db,
-        "select v.id, v.path from OldDerivationOutputs d join ValidPaths v on d.drv = v.id where d.path = ?;");
+        "select v.id, v.path from DerivationOutputs d join ValidPaths v on d.drv = v.id where d.path = ?;");
     stmtQueryDerivationOutputs.create(db,
-        "select id, path from OldDerivationOutputs where drv = ?;");
+        "select id, path from DerivationOutputs where drv = ?;");
     // Use "path >= ?" with limit 1 rather than "path like '?%'" to
     // ensure efficient lookup.
     stmtQueryPathFromHashPart.create(db,
