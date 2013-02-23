@@ -235,7 +235,7 @@ SV * derivationFromPath(char * drvPath)
     CODE:
         try {
             doInit();
-            Derivation drv = derivationFromPath(*store, drvPath);
+            OldDerivation drv = derivationFromPath(*store, drvPath);
             hash = newHV();
 
             HV * outputs = newHV();

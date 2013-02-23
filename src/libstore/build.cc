@@ -773,7 +773,7 @@ private:
     bool retrySubstitution;
 
     /* The derivation stored at drvPath. */
-    Derivation drv;
+    OldDerivation drv;
 
     /* The remainder is state held during the build. */
 
@@ -1144,7 +1144,7 @@ void DerivationGoal::repairClosure()
     std::map<Path, Path> outputsToDrv;
     foreach (PathSet::iterator, i, inputClosure)
         if (isDerivation(*i)) {
-            Derivation drv = derivationFromPath(worker.store, *i);
+            OldDerivation drv = derivationFromPath(worker.store, *i);
             foreach (DerivationOutputs::iterator, j, drv.outputs)
                 outputsToDrv[j->second.path] = *i;
         }
@@ -1214,7 +1214,7 @@ void DerivationGoal::inputsRealised()
            `*i' as input paths.  Only add the closures of output paths
            that are specified as inputs. */
         assert(worker.store.isValidPath(i->first));
-        Derivation inDrv = derivationFromPath(worker.store, i->first);
+        OldDerivation inDrv = derivationFromPath(worker.store, i->first);
         foreach (StringSet::iterator, j, i->second)
             if (inDrv.outputs.find(*j) != inDrv.outputs.end())
                 computeFSClosure(worker.store, inDrv.outputs[*j].path, inputPaths);
@@ -1784,7 +1784,7 @@ void DerivationGoal::startBuilder()
 
         foreach (PathSet::iterator, j, paths2) {
             if (isDerivation(*j)) {
-                Derivation drv = derivationFromPath(worker.store, *j);
+                OldDerivation drv = derivationFromPath(worker.store, *j);
                 foreach (DerivationOutputs::iterator, k, drv.outputs)
                     computeFSClosure(worker.store, k->second.path, paths);
             }
@@ -2211,7 +2211,7 @@ void DerivationGoal::initChild()
 /* Parse a list of reference specifiers.  Each element must either be
    a store path, or the symbolic name of the output of the derivation
    (such as `out'). */
-PathSet parseReferenceSpecifiers(const Derivation & drv, string attr)
+PathSet parseReferenceSpecifiers(const OldDerivation & drv, string attr)
 {
     PathSet result;
     Paths paths = tokenizeString<Paths>(attr);

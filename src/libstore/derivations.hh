@@ -40,7 +40,7 @@ typedef std::map<Path, StringSet> DerivationInputs;
 
 typedef std::map<string, string> StringPairs;
 
-struct Derivation
+struct OldDerivation
 {
     DerivationOutputs outputs; /* keyed on symbolic IDs */
     DerivationInputs inputDrvs; /* inputs that are sub-derivations */
@@ -57,22 +57,22 @@ class StoreAPI;
 
 /* Write a derivation to the Nix store, and return its path. */
 Path writeDerivation(StoreAPI & store,
-    const Derivation & drv, const string & name, bool repair = false);
+    const OldDerivation & drv, const string & name, bool repair = false);
 
 /* Parse a derivation. */
-Derivation parseDerivation(const string & s);
+OldDerivation parseDerivation(const string & s);
 
 /* Print a derivation. */
-string unparseDerivation(const Derivation & drv);
+string unparseDerivation(const OldDerivation & drv);
 
 /* Check whether a file name ends with the extensions for
    derivations. */
 bool isDerivation(const string & fileName);
 
 /* Return true iff this is a fixed-output derivation. */
-bool isFixedOutputDrv(const Derivation & drv);
+bool isFixedOutputDrv(const OldDerivation & drv);
 
-Hash hashDerivationModulo(StoreAPI & store, Derivation drv);
+Hash hashDerivationModulo(StoreAPI & store, OldDerivation drv);
 
 /* Memoisation of hashDerivationModulo(). */
 typedef std::map<Path, Hash> DrvHashes;

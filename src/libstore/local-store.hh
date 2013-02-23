@@ -24,7 +24,7 @@ const int nixSchemaVersion = 7;
 extern string drvsLogDir;
 
 
-struct Derivation;
+struct OldDerivation;
 
 
 struct OptimiseStats
@@ -293,7 +293,7 @@ private:
 
     Path importPath(bool requireSignature, Source & source);
 
-    void checkDerivationOutputs(const Path & drvPath, const Derivation & drv);
+    void checkDerivationOutputs(const Path & drvPath, const OldDerivation & drv);
 
     void optimisePath_(OptimiseStats & stats, const Path & path);
 };

@@ -64,7 +64,7 @@ static PathSet realisePath(const Path & path, bool build = true)
 
     if (isDerivation(p.first)) {
         if (build) store->buildPaths(singleton<PathSet>(path));
-        Derivation drv = derivationFromPath(*store, p.first);
+        OldDerivation drv = derivationFromPath(*store, p.first);
         rootNr++;
 
         if (p.second.empty())
@@ -205,7 +205,7 @@ static PathSet maybeUseOutputs(const Path & storePath, bool useOutput, bool forc
 {
     if (forceRealise) realisePath(storePath);
     if (useOutput && isDerivation(storePath)) {
-        Derivation drv = derivationFromPath(*store, storePath);
+        OldDerivation drv = derivationFromPath(*store, storePath);
         PathSet outputs;
         foreach (DerivationOutputs::iterator, i, drv.outputs)
             outputs.insert(i->second.path);
@@ -303,7 +303,7 @@ static void opQuery(Strings opFlags, Strings opArgs)
             foreach (Strings::iterator, i, opArgs) {
                 *i = followLinksToStorePath(*i);
                 if (forceRealise) realisePath(*i);
-                Derivation drv = derivationFromPath(*store, *i);
+                OldDerivation drv = derivationFromPath(*store, *i);
                 foreach (DerivationOutputs::iterator, j, drv.outputs)
                     cout << format("%1%\n") % j->second.path;
             }
@@ -342,7 +342,7 @@ static void opQuery(Strings opFlags, Strings opArgs)
         case qBinding:
             foreach (Strings::iterator, i, opArgs) {
                 Path path = useDeriver(followLinksToStorePath(*i));
-                Derivation drv = derivationFromPath(*store, path);
+                OldDerivation drv = derivationFromPath(*store, path);
                 StringPairs::iterator j = drv.env.find(bindingName);
                 if (j == drv.env.end())
                     throw Error(format("derivation `%1%' has no environment binding named `%2%'")
@@ -435,7 +435,7 @@ static void opPrintEnv(Strings opFlags, Strings opArgs)
     if (opArgs.size() != 1) throw UsageError("`--print-env' requires one derivation store path");
 
     Path drvPath = opArgs.front();
-    Derivation drv = derivationFromPath(*store, drvPath);
+    OldDerivation drv = derivationFromPath(*store, drvPath);
 
     /* Print each environment variable in the derivation in a format
        that can be sourced by the shell. */

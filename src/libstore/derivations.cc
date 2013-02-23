@@ -27,7 +27,7 @@ void DerivationOutput::parseHashInfo(bool & recursive, HashType & hashType, Hash
 
 
 Path writeDerivation(StoreAPI & store,
-    const Derivation & drv, const string & name, bool repair)
+    const OldDerivation & drv, const string & name, bool repair)
 {
     PathSet references;
     references.insert(drv.inputSrcs.begin(), drv.inputSrcs.end());
@@ -62,9 +62,9 @@ static StringSet parseStrings(std::istream & str, bool arePaths)
 }
 
 
-Derivation parseDerivation(const string & s)
+OldDerivation parseDerivation(const string & s)
 {
-    Derivation drv;
+    OldDerivation drv;
     std::istringstream str(s);
     expect(str, "Derive([");
 
@@ -138,7 +138,7 @@ static void printStrings(string & res, ForwardIterator i, ForwardIterator j)
 }
 
 
-string unparseDerivation(const Derivation & drv)
+string unparseDerivation(const OldDerivation & drv)
 {
     string s;
     s.reserve(65536);
@@ -191,7 +191,7 @@ bool isDerivation(const string & fileName)
 }
 
 
-bool isFixedOutputDrv(const Derivation & drv)
+bool isFixedOutputDrv(const OldDerivation & drv)
 {
     return drv.outputs.size() == 1 &&
         drv.outputs.begin()->first == "out" &&
@@ -222,7 +222,7 @@ DrvHashes drvHashes;
    paths have been replaced by the result of a recursive call to this
    function, and that for fixed-output derivations we return a hash of
    its output path. */
-Hash hashDerivationModulo(StoreAPI & store, Derivation drv)
+Hash hashDerivationModulo(StoreAPI & store, OldDerivation drv)
 {
     /* Return a fixed hash for fixed-output derivations. */
     if (isFixedOutputDrv(drv)) {
@@ -240,7 +240,7 @@ Hash hashDerivationModulo(StoreAPI & store, Derivation drv)
         Hash h = drvHashes[i->first];
         if (h.type == htUnknown) {
             assert(store.isValidPath(i->first));
-            Derivation drv2 = parseDerivation(readFile(i->first));
+            OldDerivation drv2 = parseDerivation(readFile(i->first));
             h = hashDerivationModulo(store, drv2);
             drvHashes[i->first] = h;
         }

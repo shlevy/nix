@@ -66,7 +66,7 @@ static void prim_import(EvalState & state, Value * * args, Value & v)
     }
 
     if (isStorePath(path) && store->isValidPath(path) && isDerivation(path)) {
-        Derivation drv = parseDerivation(readFile(path));
+        OldDerivation drv = parseDerivation(readFile(path));
         Value & w = *state.allocValue();
         state.mkAttrs(w, 1 + drv.outputs.size());
         mkString(*state.allocAttr(w, state.sDrvPath), path, singleton<PathSet>("=" + path));
@@ -324,7 +324,7 @@ static void prim_derivationStrict(EvalState & state, Value * * args, Value & v)
         ignoreNulls = state.forceBool(*attr->value);
 
     /* Build the derivation expression by processing the attributes. */
-    Derivation drv;
+    OldDerivation drv;
 
     PathSet context;
 

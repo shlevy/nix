@@ -7,7 +7,7 @@
 namespace nix {
 
 
-Derivation derivationFromPath(StoreAPI & store, const Path & drvPath)
+OldDerivation derivationFromPath(StoreAPI & store, const Path & drvPath)
 {
     assertStorePath(drvPath);
     store.ensurePath(drvPath);
@@ -59,7 +59,7 @@ void computeFSClosure(StoreAPI & store, const Path & path,
 }
 
 
-Path findOutput(const Derivation & drv, string id)
+Path findOutput(const OldDerivation & drv, string id)
 {
     foreach (DerivationOutputs::const_iterator, i, drv.outputs)
         if (i->first == id) return i->second.path;
@@ -110,7 +110,7 @@ void queryMissing(StoreAPI & store, const PathSet & targets,
                     unknown.insert(*i);
                     continue;
                 }
-                Derivation drv = derivationFromPath(store, i2.first);
+                OldDerivation drv = derivationFromPath(store, i2.first);
 
                 PathSet invalid;
                 foreach (DerivationOutputs::iterator, j, drv.outputs)
@@ -139,7 +139,7 @@ void queryMissing(StoreAPI & store, const PathSet & targets,
             DrvPathWithOutputs i2 = parseDrvPathWithOutputs(*i);
 
             // FIXME: cache this
-            Derivation drv = derivationFromPath(store, i2.first);
+            OldDerivation drv = derivationFromPath(store, i2.first);
 
             PathSet outputs;
             bool mustBuild = false;

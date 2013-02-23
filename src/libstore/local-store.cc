@@ -551,7 +551,7 @@ void canonicalisePathMetaData(const Path & path)
 }
 
 
-void LocalStore::checkDerivationOutputs(const Path & drvPath, const Derivation & drv)
+void LocalStore::checkDerivationOutputs(const Path & drvPath, const OldDerivation & drv)
 {
     string drvName = storePathToName(drvPath);
     assert(isDerivation(drvName));
@@ -573,7 +573,7 @@ void LocalStore::checkDerivationOutputs(const Path & drvPath, const Derivation &
     }
 
     else {
-        Derivation drvCopy(drv);
+        OldDerivation drvCopy(drv);
         foreach (DerivationOutputs::iterator, i, drvCopy.outputs) {
             i->second.path = "";
             drvCopy.env[i->first] = "";
@@ -615,7 +615,7 @@ unsigned long long LocalStore::addValidPath(const ValidPathInfo & info, bool che
        efficiently query whether a path is an output of some
        derivation. */
     if (isDerivation(info.path)) {
-        Derivation drv = parseDerivation(readFile(info.path));
+        OldDerivation drv = parseDerivation(readFile(info.path));
 
         /* Verify that the output paths in the derivation are correct
            (i.e., follow the scheme for computing output paths from
