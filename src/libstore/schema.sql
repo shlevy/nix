@@ -28,7 +28,7 @@ create trigger if not exists DeleteSelfRefs before delete on ValidPaths
     delete from Refs where referrer = old.id and reference = old.id;
   end;
 
-create table if not exists OldDerivationOutputs (
+create table if not exists DerivationOutputs (
     drv  integer not null,
     id   text not null, -- symbolic output id, usually "out"
     path text not null,
@@ -36,7 +36,7 @@ create table if not exists OldDerivationOutputs (
     foreign key (drv) references ValidPaths(id) on delete cascade
 );
 
-create index if not exists IndexDerivationOutputs on OldDerivationOutputs(path);
+create index if not exists IndexDerivationOutputs on DerivationOutputs(path);
 
 create table if not exists FailedPaths (
     path text primary key not null,
