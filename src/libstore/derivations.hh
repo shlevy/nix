@@ -51,6 +51,35 @@ struct OldDerivation
     StringPairs env;
 };
 
+struct DerivationOutputHashInfo
+{
+    bool fixedOutput;
+    Hash hash;
+    bool recursive;
+    DerivationOutputHashInfo()
+    {
+        this->fixedOutput = false;
+    }
+    DerivationOutputHashInfo(Hash hash, bool recursive)
+    {
+        this->fixedOutput = true;
+        this->hash = hash;
+        this->recursive = recursive;
+    }
+};
+
+typedef std::map<string, DerivationOutputHashInfo> DerivationOutputs;
+
+struct Derivation
+{
+    DerivationOutputs outputs;
+    PathSet inputs;
+    string platform;
+    Path builder;
+    Strings args;
+    StringPairs env;
+};
+
 
 class StoreAPI;
 
