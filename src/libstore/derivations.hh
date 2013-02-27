@@ -73,12 +73,18 @@ typedef std::map<string, DerivationOutput> DerivationOutputs;
 
 struct Derivation
 {
+    public:
     DerivationOutputs outputs;
     PathSet inputs;
     string platform;
     Path builder;
     Strings args;
     StringPairs env;
+    private:
+    Hash cachedHash;
+    public:
+    Hash hash() const;
+    bool operator < (const Derivation & d2) const;
 };
 
 
@@ -103,9 +109,6 @@ bool isDerivation(const string & fileName);
 bool isFixedOutputDrv(const OldDerivation & drv);
 
 Hash hashDerivationModulo(StoreAPI & store, OldDerivation drv);
-
-/* Return a canonical hash of the Derivation */
-Hash hashDerivation(Derivation drv);
 
 /* Memoisation of hashDerivationModulo(). */
 typedef std::map<Path, Hash> DrvHashes;
