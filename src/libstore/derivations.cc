@@ -259,6 +259,8 @@ Hash Derivation::hash() const
         s.reserve(65536);
         s += "Derive([";
 
+        printString(s, name); s += "],";
+
         bool first = true;
         foreach (DerivationOutputs::const_iterator, i, outputs) {
             if (first) first = false; else s += ',';
@@ -323,5 +325,20 @@ bool wantOutput(const string & output, const std::set<string> & wanted)
     return wanted.empty() || wanted.find(output) != wanted.end();
 }
 
+
+void KnownDerivations::addDerivation(Derivation & drv)
+{
+    Derivation const *drvPointer = &(*derivations.insert(drv).first);
+    foreach (DerivationOutputs::iterator, i, drv.outputs) {
+        if (i->second.fixedOutput)
+            i->second.outPath = makeFixedOutputPath(i->second.recursive, i->second.hash.type,
+                    i->second.hash, drv.name + (i->first == "out" ? "" : "-" + i->first));
+        else
+            i->second.outPath = makeOutputPath(i->first, drv.hash(), drv.name);
+        buildMap[i->second.outPath] = drvPointer;
+    }
+}
+
+KnownDerivations knownDerivations;
 
 }

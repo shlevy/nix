@@ -51,6 +51,7 @@ struct OldDerivation
     StringPairs env;
 };
 
+
 struct DerivationOutput
 {
     Path outPath;
@@ -74,6 +75,7 @@ typedef std::map<string, DerivationOutput> DerivationOutputs;
 struct Derivation
 {
     public:
+    string name;
     DerivationOutputs outputs;
     PathSet inputs;
     string platform;
@@ -86,6 +88,21 @@ struct Derivation
     Hash hash() const;
     bool operator < (const Derivation & d2) const;
 };
+
+
+typedef std::set<Derivation> DerivationSet;
+
+typedef std::map<Path,Derivation const *> BuildMap;
+
+struct KnownDerivations
+{
+    DerivationSet derivations;
+    BuildMap buildMap;
+    void addDerivation(Derivation & drv);
+};
+
+/* Given a path, how do I build it? */
+extern KnownDerivations knownDerivations;
 
 
 class StoreAPI;
