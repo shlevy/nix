@@ -51,16 +51,17 @@ struct OldDerivation
     StringPairs env;
 };
 
-struct DerivationOutputHashInfo
+struct DerivationOutput
 {
+    Path outPath;
     bool fixedOutput;
     Hash hash;
     bool recursive;
-    DerivationOutputHashInfo()
+    DerivationOutput()
     {
         this->fixedOutput = false;
     }
-    DerivationOutputHashInfo(Hash hash, bool recursive)
+    DerivationOutput(Hash hash, bool recursive)
     {
         this->fixedOutput = true;
         this->hash = hash;
@@ -68,7 +69,7 @@ struct DerivationOutputHashInfo
     }
 };
 
-typedef std::map<string, DerivationOutputHashInfo> DerivationOutputs;
+typedef std::map<string, DerivationOutput> DerivationOutputs;
 
 struct Derivation
 {
