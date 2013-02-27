@@ -15,15 +15,15 @@ const string drvExtension = ".drv";
 
 /* Abstract syntax of derivations. */
 
-struct DerivationOutput
+struct OldDerivationOutput
 {
     Path path;
     string hashAlgo; /* hash used for expected hash computation */
     string hash; /* expected hash, may be null */
-    DerivationOutput()
+    OldDerivationOutput()
     {
     }
-    DerivationOutput(Path path, string hashAlgo, string hash)
+    OldDerivationOutput(Path path, string hashAlgo, string hash)
     {
         this->path = path;
         this->hashAlgo = hashAlgo;
@@ -32,7 +32,7 @@ struct DerivationOutput
     void parseHashInfo(bool & recursive, HashType & hashType, Hash & hash) const;
 };
 
-typedef std::map<string, DerivationOutput> OldDerivationOutputs;
+typedef std::map<string, OldDerivationOutput> OldDerivationOutputs;
 
 /* For inputs that are sub-derivations, we specify exactly which
    output IDs we are interested in. */

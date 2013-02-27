@@ -8,7 +8,7 @@
 namespace nix {
 
 
-void DerivationOutput::parseHashInfo(bool & recursive, HashType & hashType, Hash & hash) const
+void OldDerivationOutput::parseHashInfo(bool & recursive, HashType & hashType, Hash & hash) const
 {
     recursive = false;
     string algo = hashAlgo;
@@ -70,7 +70,7 @@ OldDerivation parseDerivation(const string & s)
 
     /* Parse the list of outputs. */
     while (!endOfList(str)) {
-        DerivationOutput out;
+        OldDerivationOutput out;
         expect(str, "("); string id = parseString(str);
         expect(str, ","); out.path = parsePath(str);
         expect(str, ","); out.hashAlgo = parseString(str);

@@ -472,7 +472,7 @@ static void prim_derivationStrict(EvalState & state, Value * * args, Value & v)
 
         Path outPath = makeFixedOutputPath(outputHashRecursive, ht, h, drvName);
         drv.env["out"] = outPath;
-        drv.outputs["out"] = DerivationOutput(outPath, outputHashAlgo, outputHash);
+        drv.outputs["out"] = OldDerivationOutput(outPath, outputHashAlgo, outputHash);
     }
 
     else {
@@ -483,7 +483,7 @@ static void prim_derivationStrict(EvalState & state, Value * * args, Value & v)
            output names do get reflected in the hash. */
         foreach (StringSet::iterator, i, outputs) {
             drv.env[*i] = "";
-            drv.outputs[*i] = DerivationOutput("", "", "");
+            drv.outputs[*i] = OldDerivationOutput("", "", "");
         }
 
         /* Use the masked derivation expression to compute the output
