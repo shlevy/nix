@@ -339,6 +339,20 @@ void KnownDerivations::addDerivation(Derivation & drv)
     }
 }
 
+
+void KnownDerivations::addOldDerivation(Path drvPath, StringSet outputs)
+{
+    assert(isDerivation(drvPath));
+    Derivation fakeDrv;
+    /* Since derivation names can't end in .drv, this will never overlap with a
+       new-style Derivation (also it has no outputs) */
+    fakeDrv.name = drvPath;
+    Derivation const *drvPointer = &(*derivations.insert(fakeDrv).first);
+    foreach (StringSet::iterator, i, outputs)
+        buildMap[drvPath + "!" + *i] = drvPointer;
+}
+
+
 KnownDerivations knownDerivations;
 
 }
