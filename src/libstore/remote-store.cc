@@ -436,7 +436,7 @@ Paths RemoteStore::importPaths(bool requireSignature, Source & source)
 }
 
 
-void RemoteStore::buildPaths(const PathSet & drvPaths, DerivablePaths derivablePaths, bool repair)
+void RemoteStore::buildPaths(const PathSet & drvPaths, bool repair)
 {
     if (repair) throw Error("repairing is not supported when building through the Nix daemon");
     openConnection();

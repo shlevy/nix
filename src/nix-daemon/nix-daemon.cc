@@ -447,7 +447,7 @@ static void performOp(unsigned int clientVersion,
     case wopBuildPaths: {
         PathSet drvs = readStorePaths<PathSet>(from);
         startWork();
-        store->buildPaths(drvs, DerivablePaths());
+        store->buildPaths(drvs);
         stopWork();
         writeInt(1, to);
         break;

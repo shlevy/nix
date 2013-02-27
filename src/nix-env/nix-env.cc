@@ -701,7 +701,7 @@ static void opSet(Globals & globals,
         PathSet paths = singleton<PathSet>(drv.queryDrvPath(globals.state));
         printMissing(*store, paths);
         if (globals.dryRun) return;
-        store->buildPaths(paths, DerivablePaths(), globals.state.repair);
+        store->buildPaths(paths, globals.state.repair);
     }
     else {
         printMissing(*store, singleton<PathSet>(drv.queryOutPath(globals.state)));

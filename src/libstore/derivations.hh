@@ -80,7 +80,6 @@ struct Derivation
     StringPairs env;
 };
 
-typedef std::map<Path, Derivation> DerivablePaths;
 
 class StoreAPI;
 

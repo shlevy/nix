@@ -3253,7 +3253,7 @@ unsigned int Worker::exitStatus()
 //////////////////////////////////////////////////////////////////////
 
 
-void LocalStore::buildPaths(const PathSet & drvPaths, DerivablePaths derivablePaths, bool repair)
+void LocalStore::buildPaths(const PathSet & drvPaths, bool repair)
 {
     startNest(nest, lvlDebug,
         format("building %1%") % showPaths(drvPaths));

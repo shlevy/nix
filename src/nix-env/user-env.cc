@@ -45,7 +45,7 @@ bool createUserEnv(EvalState & state, DrvInfos & elems,
             drvsToBuild.insert(i->queryDrvPath(state));
 
     debug(format("building user environment dependencies"));
-    store->buildPaths(drvsToBuild, DerivablePaths(), state.repair);
+    store->buildPaths(drvsToBuild, state.repair);
 
     /* Construct the whole top level derivation. */
     PathSet references;
@@ -147,7 +147,7 @@ bool createUserEnv(EvalState & state, DrvInfos & elems,
 
     /* Realise the resulting store expression. */
     debug("building user environment");
-    store->buildPaths(singleton<PathSet>(topLevelDrv.queryDrvPath(state)), DerivablePaths(), state.repair);
+    store->buildPaths(singleton<PathSet>(topLevelDrv.queryDrvPath(state)), state.repair);
 
     /* Switch the current user environment to the output path. */
     PathLocks lock;
