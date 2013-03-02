@@ -641,24 +641,29 @@ static void performOp(unsigned int clientVersion,
             drv.name = readString(from);
             if (drv.name == "")
                 break;
-            StringSet outputs = readStrings<StringSet>(from);
-            foreach (StringSet::iterator, i, outputs) {
+            while (true) {
+                string outputName = readString(from);
+                if (outputName == "")
+                    break;
                 bool fixedOutput = readInt(from) != 0;
                 if (fixedOutput) {
                     HashType ht = parseHashType(readString(from));
                     Hash hash = parseHash(ht, readString(from));
                     bool recursive = readInt(from) != 0;
-                    drv.outputs[*i] = DerivationOutput(hash, recursive);
+                    drv.outputs[outputName] = DerivationOutput(hash, recursive);
                 } else
-                    drv.outputs[*i] = DerivationOutput();
+                    drv.outputs[outputName] = DerivationOutput();
             }
             drv.inputs = readStrings<PathSet>(from);
             drv.platform = readString(from);
             drv.builder = readString(from);
-            Strings args = readStrings<Strings>(from);
-            StringSet envKeys = readStrings<StringSet>(from);
-            foreach (StringSet::iterator, i, envKeys)
-                drv.env[*i] = readString(from);
+            drv.args = readStrings<Strings>(from);
+            while (true) {
+                string key = readString(from);
+                if (key == "")
+                    break;
+                drv.env[key] = readString(from);
+            }
             startWork();
             if (isDerivation(drv.name))
                 throw Error(format("derivation names are not allowed to end in `%1%'") % drvExtension);

@@ -2,6 +2,7 @@
 #include "util.hh"
 #include "remote-store.hh"
 #include "worker-protocol.hh"
+#include "derivations.hh"
 #include "archive.hh"
 #include "globals.hh"
 
@@ -440,6 +441,32 @@ void RemoteStore::buildPaths(const PathSet & drvPaths, bool repair)
 {
     if (repair) throw Error("repairing is not supported when building through the Nix daemon");
     openConnection();
+    if (GET_PROTOCOL_MINOR(daemonVersion) >= 14) {
+        writeInt(wopAddDerivations, to);
+        foreach (DerivationSet::iterator, i, knownDerivations.derivations) {
+            writeString(i->name, to);
+            foreach (DerivationOutputs::const_iterator, j, i->outputs) {
+                writeString(j->first, to);
+                writeInt(j->second.fixedOutput ? 1 : 0, to);
+                if (j->second.fixedOutput) {
+                    writeString(printHashType(j->second.hash.type), to);
+                    writeString(printHash(j->second.hash), to);
+                    writeInt(j->second.recursive ? 1 : 0, to);
+                }
+            }
+            writeString("", to);
+            writeStrings<PathSet>(i->inputs, to);
+            writeString(i->platform, to);
+            writeString(i->builder, to);
+            writeStrings<Strings>(i->args, to);
+            foreach (StringPairs::const_iterator, j, i->env) {
+                writeString(j->first, to);
+                writeString(j->second, to);
+            }
+            writeString("", to);
+        }
+        writeString("", to);
+    }
     writeInt(wopBuildPaths, to);
     if (GET_PROTOCOL_MINOR(daemonVersion) >= 13)
         writeStrings(drvPaths, to);
