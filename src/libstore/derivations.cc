@@ -340,6 +340,20 @@ void KnownDerivations::addDerivation(Derivation & drv)
 }
 
 
+void KnownDerivations::removeDerivation(const Derivation & drv)
+{
+    DerivationSet::iterator i = derivations.find(drv);
+
+    if (i == derivations.end())
+        return;
+
+    foreach (DerivationOutputs::const_iterator, j, i->outputs)
+        buildMap.erase(j->second.outPath);
+
+    derivations.erase(i);
+}
+
+
 const Derivation & KnownDerivations::addOldDerivation(const Path & drvPath, const PathSet & outputPaths)
 {
     assert(isDerivation(drvPath));

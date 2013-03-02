@@ -99,6 +99,7 @@ struct KnownDerivations
     DerivationSet derivations;
     BuildMap buildMap;
     void addDerivation(Derivation & drv);
+    void removeDerivation(const Derivation & drv);
     const Derivation & addOldDerivation(const Path & drvPath, const PathSet & outputPaths);
 };
 
