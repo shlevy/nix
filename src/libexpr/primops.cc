@@ -24,18 +24,6 @@ namespace nix {
  *************************************************************/
 
 
-/* Decode a context string ‘!<name>!<path>’ into a pair <path,
-   name>. */
-std::pair<string, string> decodeContext(const string & s)
-{
-    if (s.at(0) == '!') {
-        size_t index = s.find("!", 1);
-        return std::pair<string, string>(string(s, index + 1), string(s, 1, index - 1));
-    } else
-        return std::pair<string, string>(s, "");
-}
-
-
 /* Load and evaluate an expression from path specified by the
    argument. */ 
 static void prim_import(EvalState & state, Value * * args, Value & v)
@@ -43,26 +31,25 @@ static void prim_import(EvalState & state, Value * * args, Value & v)
     PathSet context;
     Path path = state.coerceToPath(*args[0], context);
 
+    if (!settings.readOnlyMode) {
+        try {
+            /* For performance, prefetch all substitute info. */
+            PathSet willBuild, willSubstitute, unknown;
+            unsigned long long downloadSize, narSize;
+            queryMissing(*store, context,
+                willBuild, willSubstitute, unknown, downloadSize, narSize);
+              
+            store->buildPaths(context);
+        } catch (Error & e) {
+            throw ImportError(e.msg());
+        }
+    }
+
     foreach (PathSet::iterator, i, context) {
-        Path ctx = decodeContext(*i).first;
-        assert(isStorePath(ctx));
-        if (!store->isValidPath(ctx))
+        assert(isStorePath(*i));
+        if (!store->isValidPath(*i))
             throw EvalError(format("cannot import `%1%', since path `%2%' is not valid")
-                % path % ctx);
-        if (isDerivation(ctx))
-            try {
-                /* For performance, prefetch all substitute info. */
-                PathSet willBuild, willSubstitute, unknown;
-                unsigned long long downloadSize, narSize;
-                queryMissing(*store, singleton<PathSet>(ctx),
-                    willBuild, willSubstitute, unknown, downloadSize, narSize);
-                  
-                /* !!! If using a substitute, we only need to fetch
-                   the selected output of this derivation. */
-                store->buildPaths(singleton<PathSet>(ctx));
-            } catch (Error & e) {
-                throw ImportError(e.msg());
-            }
+                % path % *i);
     }
 
     if (isStorePath(path) && store->isValidPath(path) && isDerivation(path)) {
