@@ -1,10 +1,9 @@
-attrs @ { drvPath, outputs, ... }:
+attrs @ {outputs, ... }:
 
 let
 
   commonAttrs = (builtins.listToAttrs outputsList) //
     { all = map (x: x.value) outputsList;
-      inherit drvPath;
       type = "derivation";
     };
 

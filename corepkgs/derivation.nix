@@ -16,7 +16,6 @@ let
     { name = outputName;
       value = commonAttrs // {
         outPath = builtins.getAttr outputName strict;
-        drvPath = strict.drvPath;
         type = "derivation";
         inherit outputName;
       };

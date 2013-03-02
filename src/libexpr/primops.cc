@@ -69,14 +69,13 @@ static void prim_import(EvalState & state, Value * * args, Value & v)
         OldDerivation drv = parseDerivation(readFile(path));
         Value & w = *state.allocValue();
         state.mkAttrs(w, 1 + drv.outputs.size());
-        mkString(*state.allocAttr(w, state.sDrvPath), path, singleton<PathSet>("=" + path));
         state.mkList(*state.allocAttr(w, state.symbols.create("outputs")), drv.outputs.size());
         unsigned int outputs_index = 0;
 
         Value * outputsVal = w.attrs->find(state.symbols.create("outputs"))->value;
         foreach (OldDerivationOutputs::iterator, i, drv.outputs) {
             mkString(*state.allocAttr(w, state.symbols.create(i->first)),
-                i->second.path, singleton<PathSet>("!" + i->first + "!" + path));
+                i->second.path, singleton<PathSet>(i->second.path));
             mkString(*(outputsVal->list.elems[outputs_index++] = state.allocValue()),
                 i->first);
         }
@@ -324,7 +323,7 @@ static void prim_derivationStrict(EvalState & state, Value * * args, Value & v)
         ignoreNulls = state.forceBool(*attr->value);
 
     /* Build the derivation expression by processing the attributes. */
-    OldDerivation drv;
+    Derivation drv;
 
     PathSet context;
 
@@ -364,8 +363,8 @@ static void prim_derivationStrict(EvalState & state, Value * * args, Value & v)
                 if (key == "builder") drv.builder = s;
                 else if (i->name == state.sSystem) drv.platform = s;
                 else if (i->name == state.sName) {
-                    drvName = s;
-                    printMsg(lvlVomit, format("derivation name is `%1%'") % drvName);
+                    drv.name = s;
+                    printMsg(lvlVomit, format("derivation name is `%1%'") % drv.name);
                 }
                 else if (key == "outputHash") outputHash = s;
                 else if (key == "outputHashAlgo") outputHashAlgo = s;
@@ -398,7 +397,7 @@ static void prim_derivationStrict(EvalState & state, Value * * args, Value & v)
             e.addPrefix(format("while evaluating the derivation attribute `%1%' at %2%:\n")
                 % key % *i->pos);
             e.addPrefix(format("while instantiating the derivation named `%1%' at %2%:\n")
-                % drvName % posDrvName);
+                % drv.name % posDrvName);
             throw;
         }
     }
@@ -406,45 +405,8 @@ static void prim_derivationStrict(EvalState & state, Value * * args, Value & v)
     /* Everything in the context of the strings in the derivation
        attributes should be added as dependencies of the resulting
        derivation. */
-    foreach (PathSet::iterator, i, context) {
-        Path path = *i;
-
-        /* Paths marked with `=' denote that the path of a derivation
-           is explicitly passed to the builder.  Since that allows the
-           builder to gain access to every path in the dependency
-           graph of the derivation (including all outputs), all paths
-           in the graph must be added to this derivation's list of
-           inputs to ensure that they are available when the builder
-           runs. */
-        if (path.at(0) == '=') {
-            /* !!! This doesn't work if readOnlyMode is set. */
-            PathSet refs; computeFSClosure(*store, string(path, 1), refs);
-            foreach (PathSet::iterator, j, refs) {
-                drv.inputSrcs.insert(*j);
-                if (isDerivation(*j))
-                    drv.inputDrvs[*j] = store->queryDerivationOutputNames(*j);
-            }
-        }
-
-        /* See prim_unsafeDiscardOutputDependency. */
-        else if (path.at(0) == '~')
-            drv.inputSrcs.insert(string(path, 1));
-
-        /* Handle derivation outputs of the form ‘!<name>!<path>’. */
-        else if (path.at(0) == '!') {
-            std::pair<string, string> ctx = decodeContext(path);
-            drv.inputDrvs[ctx.first].insert(ctx.second);
-        }
-
-        /* Handle derivation contexts returned by
-           ‘builtins.storePath’. */
-        else if (isDerivation(path))
-            drv.inputDrvs[path] = store->queryDerivationOutputNames(path);
-
-        /* Otherwise it's a source file. */
-        else
-            drv.inputSrcs.insert(path);
-    }
+    foreach (PathSet::iterator, i, context)
+        drv.inputs.insert(*i);
 
     /* Do we have all required attributes? */
     if (drv.builder == "")
@@ -453,8 +415,8 @@ static void prim_derivationStrict(EvalState & state, Value * * args, Value & v)
         throw EvalError("required attribute `system' missing");
 
     /* Check whether the derivation name is valid. */
-    checkStoreName(drvName);
-    if (isDerivation(drvName))
+    checkStoreName(drv.name);
+    if (isDerivation(drv.name))
         throw EvalError(format("derivation names are not allowed to end in `%1%'")
             % drvExtension);
 
@@ -467,54 +429,23 @@ static void prim_derivationStrict(EvalState & state, Value * * args, Value & v)
         if (ht == htUnknown)
             throw EvalError(format("unknown hash algorithm `%1%'") % outputHashAlgo);
         Hash h = parseHash16or32(ht, outputHash);
-        outputHash = printHash(h);
-        if (outputHashRecursive) outputHashAlgo = "r:" + outputHashAlgo;
-
-        Path outPath = makeFixedOutputPath(outputHashRecursive, ht, h, drvName);
-        drv.env["out"] = outPath;
-        drv.outputs["out"] = OldDerivationOutput(outPath, outputHashAlgo, outputHash);
+        drv.outputs["out"] = DerivationOutput(h, outputHashRecursive);
     }
 
     else {
-        /* Construct the "masked" store derivation, which is the final
-           one except that in the list of outputs, the output paths
-           are empty, and the corresponding environment variables have
-           an empty value.  This ensures that changes in the set of
-           output names do get reflected in the hash. */
-        foreach (StringSet::iterator, i, outputs) {
-            drv.env[*i] = "";
-            drv.outputs[*i] = OldDerivationOutput("", "", "");
-        }
-
-        /* Use the masked derivation expression to compute the output
-           path. */
-        Hash h = hashDerivationModulo(*store, drv);
-
-        foreach (OldDerivationOutputs::iterator, i, drv.outputs)
-            if (i->second.path == "") {
-                Path outPath = makeOutputPath(i->first, h, drvName);
-                drv.env[i->first] = outPath;
-                i->second.path = outPath;
-            }
+        foreach (StringSet::iterator, i, outputs)
+            drv.outputs[*i] = DerivationOutput();
     }
 
-    /* Write the resulting term into the Nix store directory. */
-    Path drvPath = writeDerivation(*store, drv, drvName, state.repair);
+    knownDerivations.addDerivation(drv);
 
-    printMsg(lvlChatty, format("instantiated `%1%' -> `%2%'")
-        % drvName % drvPath);
+    printMsg(lvlChatty, format("instantiated `%1%'")
+        % drv.name);
 
-    /* Optimisation, but required in read-only mode! because in that
-       case we don't actually write store derivations, so we can't
-       read them later. */
-    drvHashes[drvPath] = hashDerivationModulo(*store, drv);
-
-    state.mkAttrs(v, 1 + drv.outputs.size());
-    mkString(*state.allocAttr(v, state.sDrvPath), drvPath, singleton<PathSet>("=" + drvPath));
-    foreach (OldDerivationOutputs::iterator, i, drv.outputs) {
+    state.mkAttrs(v, drv.outputs.size());
+    foreach (DerivationOutputs::iterator, i, drv.outputs)
         mkString(*state.allocAttr(v, state.symbols.create(i->first)),
-            i->second.path, singleton<PathSet>("!" + i->first + "!" + drvPath));
-    }
+            i->second.outPath, singleton<PathSet>(i->second.outPath));
     v.attrs->sort();
 }
 
@@ -624,20 +555,10 @@ static void prim_toFile(EvalState & state, Value * * args, Value & v)
     PathSet context;
     string name = state.forceStringNoCtx(*args[0]);
     string contents = state.forceString(*args[1], context);
-
-    PathSet refs;
-
-    foreach (PathSet::iterator, i, context) {
-        Path path = *i;
-        if (path.at(0) == '=') path = string(path, 1);
-        if (isDerivation(path))
-            throw EvalError(format("in `toFile': the file `%1%' cannot refer to derivation outputs") % name);
-        refs.insert(path);
-    }
     
     Path storePath = settings.readOnlyMode
-        ? computeStorePathForText(name, contents, refs)
-        : store->addTextToStore(name, contents, refs, state.repair);
+        ? computeStorePathForText(name, contents, context)
+        : store->addTextToStore(name, contents, context, state.repair);
 
     /* Note: we don't need to add `context' to the context of the
        result, since `storePath' itself has references to the paths
@@ -1085,25 +1006,12 @@ static void prim_unsafeDiscardStringContext(EvalState & state, Value * * args, V
 }
 
 
-/* Sometimes we want to pass a derivation path (i.e. pkg.drvPath) to a
-   builder without causing the derivation to be built (for instance,
-   in the derivation that builds NARs in nix-push, when doing
-   source-only deployment).  This primop marks the string context so
-   that builtins.derivation adds the path to drv.inputSrcs rather than
-   drv.inputDrvs. */
+/* Now a no-op */
 static void prim_unsafeDiscardOutputDependency(EvalState & state, Value * * args, Value & v)
 {
     PathSet context;
     string s = state.coerceToString(*args[0], context);
-
-    PathSet context2;
-    foreach (PathSet::iterator, i, context) {
-        Path p = *i;
-        if (p.at(0) == '=') p = "~" + string(p, 1);
-        context2.insert(p);
-    }
-    
-    mkString(v, s, context2);
+    mkString(v, s, context);
 }
 
 
