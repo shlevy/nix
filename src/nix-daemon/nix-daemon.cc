@@ -3,6 +3,7 @@
 #include "util.hh"
 #include "serialise.hh"
 #include "worker-protocol.hh"
+#include "derivations.hh"
 #include "archive.hh"
 #include "globals.hh"
 
@@ -631,6 +632,39 @@ static void performOp(unsigned int clientVersion,
         writeStrings(info.references, to);
         writeInt(info.registrationTime, to);
         writeLongLong(info.narSize, to);
+        break;
+    }
+
+    case wopAddDerivations: {
+        while (true) {
+            Derivation drv;
+            drv.name = readString(from);
+            if (drv.name == "")
+                break;
+            StringSet outputs = readStrings<StringSet>(from);
+            foreach (StringSet::iterator, i, outputs) {
+                bool fixedOutput = readInt(from) != 0;
+                if (fixedOutput) {
+                    HashType ht = parseHashType(readString(from));
+                    Hash hash = parseHash(ht, readString(from));
+                    bool recursive = readInt(from) != 0;
+                    drv.outputs[*i] = DerivationOutput(hash, recursive);
+                } else
+                    drv.outputs[*i] = DerivationOutput();
+            }
+            drv.inputs = readStrings<PathSet>(from);
+            drv.platform = readString(from);
+            drv.builder = readString(from);
+            Strings args = readStrings<Strings>(from);
+            StringSet envKeys = readStrings<StringSet>(from);
+            foreach (StringSet::iterator, i, envKeys)
+                drv.env[*i] = readString(from);
+            startWork();
+            if (isDerivation(drv.name))
+                throw Error(format("derivation names are not allowed to end in `%1%'") % drvExtension);
+            knownDerivations.addDerivation(drv);
+            stopWork();
+        }
         break;
     }
 
