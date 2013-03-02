@@ -91,7 +91,8 @@ typedef set<GoalPtr> Goals;
 typedef set<WeakGoalPtr> WeakGoals;
 
 /* A map of paths to goals (and the other way around). */
-typedef map<Path, WeakGoalPtr> WeakGoalMap;
+typedef map<Path, WeakGoalPtr> WeakSubstitutionGoalMap;
+typedef map<Hash, WeakGoalPtr> WeakDerivationGoalMap;
 
 
 
@@ -220,8 +221,8 @@ private:
 
     /* Maps used to prevent multiple instantiations of a goal for the
        same derivation / path. */
-    WeakGoalMap derivationGoals;
-    WeakGoalMap substitutionGoals;
+    WeakDerivationGoalMap derivationGoals;
+    WeakSubstitutionGoalMap substitutionGoals;
 
     /* Goals waiting for busy paths to be unlocked. */
     WeakGoals waitingForAnyGoal;
@@ -249,7 +250,7 @@ public:
     ~Worker();
 
     /* Make a goal (with caching). */
-    GoalPtr makeDerivationGoal(const Path & drvPath, const StringSet & wantedOutputs, bool repair = false);
+    GoalPtr makeDerivationGoal(const Derivation & drv, const Path & wantedOutputPath, bool repair = false);
     GoalPtr makeSubstitutionGoal(const Path & storePath, bool repair = false);
 
     /* Remove a dead goal. */
@@ -758,12 +759,12 @@ class SubstitutionGoal;
 class DerivationGoal : public Goal
 {
 private:
-    /* The path of the derivation. */
+    /* The path of the derivation (not a real store path for new-style drvs) */
     Path drvPath;
 
-    /* The specific outputs that we need to build.  Empty means all of
+    /* The specific outputs paths that we need to build.  Empty means all of
        them. */
-    StringSet wantedOutputs;
+    StringSet wantedOutputPaths;
 
     /* Whether additional wanted outputs have been added. */
     bool needRestart;
@@ -772,8 +773,8 @@ private:
        inputs. */
     bool retrySubstitution;
 
-    /* The derivation stored at drvPath. */
-    OldDerivation drv;
+    /* The derivation. */
+    Derivation drv;
 
     /* The remainder is state held during the build. */
 
@@ -848,7 +849,7 @@ private:
     const static int childSetupFailed = 189;
 
 public:
-    DerivationGoal(const Path & drvPath, const StringSet & wantedOutputs, Worker & worker, bool repair = false);
+    DerivationGoal(const Derivation & drv, const Path & wantedOutputPath, Worker & worker, bool repair = false);
     ~DerivationGoal();
 
     void cancel();
@@ -860,12 +861,13 @@ public:
         return drvPath;
     }
 
-    /* Add wanted outputs to an already existing derivation goal. */
-    void addWantedOutputs(const StringSet & outputs);
+    /* Add a wanted output path to an already existing derivation goal. */
+    void addWantedOutputPath(const Path & outputPath);
 
 private:
     /* The states. */
     void init();
+    void haveDerivationFile();
     void haveDerivation();
     void outputsSubstituted();
     void closureRepaired();
@@ -917,9 +919,8 @@ private:
 };
 
 
-DerivationGoal::DerivationGoal(const Path & drvPath, const StringSet & wantedOutputs, Worker & worker, bool repair)
+DerivationGoal::DerivationGoal(const Derivation & drv, const Path & wantedOutputPath, Worker & worker, bool repair)
     : Goal(worker)
-    , wantedOutputs(wantedOutputs)
     , needRestart(false)
     , retrySubstitution(false)
     , fLogFile(0)
@@ -927,8 +928,17 @@ DerivationGoal::DerivationGoal(const Path & drvPath, const StringSet & wantedOut
     , useChroot(false)
     , repair(repair)
 {
-    this->drvPath = drvPath;
-    state = &DerivationGoal::init;
+    wantedOutputPaths = singleton<PathSet>(wantedOutputPath);
+    this->drv = drv;
+
+    if (isDerivation(drv.name)) {
+        state = &DerivationGoal::init;
+        drvPath = drv.name;
+    } else {
+        state = &DerivationGoal::haveDerivation;
+        /* Create a fake store path to use as a name for this derivation */
+        drvPath = makeStorePath("drv", drv.hash(), drv.name);
+    }
     name = (format("building of `%1%'") % drvPath).str();
     trace("created");
 }
@@ -990,20 +1000,15 @@ void DerivationGoal::work()
 }
 
 
-void DerivationGoal::addWantedOutputs(const StringSet & outputs)
+void DerivationGoal::addWantedOutputPath(const Path & outputPath)
 {
     /* If we already want all outputs, there is nothing to do. */
-    if (wantedOutputs.empty()) return;
+    if (wantedOutputPaths.empty()) return;
 
-    if (outputs.empty()) {
-        wantedOutputs.clear();
+    if (wantedOutputPaths.find(outputPath) == wantedOutputPaths.end()) {
+        wantedOutputPaths.insert(outputPath);
         needRestart = true;
-    } else
-        foreach (StringSet::const_iterator, i, outputs)
-            if (wantedOutputs.find(*i) == wantedOutputs.end()) {
-                wantedOutputs.insert(*i);
-                needRestart = true;
-            }
+    }
 }
 
 
@@ -1019,11 +1024,11 @@ void DerivationGoal::init()
        substitute. */
     addWaitee(worker.makeSubstitutionGoal(drvPath));
 
-    state = &DerivationGoal::haveDerivation;
+    state = &DerivationGoal::haveDerivationFile;
 }
 
 
-void DerivationGoal::haveDerivation()
+void DerivationGoal::haveDerivationFile()
 {
     trace("loading derivation");
 
@@ -1033,18 +1038,101 @@ void DerivationGoal::haveDerivation()
         return;
     }
 
-    /* `drvPath' should already be a root, but let's be on the safe
-       side: if the user forgot to make it a root, we wouldn't want
-       things being garbage collected while we're busy. */
-    worker.store.addTempRoot(drvPath);
-
     assert(worker.store.isValidPath(drvPath));
 
     /* Get the derivation. */
-    drv = derivationFromPath(worker.store, drvPath);
+    OldDerivation oldDrv = derivationFromPath(worker.store, drvPath);
 
-    foreach (OldDerivationOutputs::iterator, i, drv.outputs)
-        worker.store.addTempRoot(i->second.path);
+    /* Construct a phony new-style Derivation */
+    Derivation newDrv;
+    string drvName = storePathToName(drvPath);
+    newDrv.name = drvName.substr(0, drvName.size() - drvExtension.size());
+    newDrv.platform = oldDrv.platform;
+    newDrv.builder = oldDrv.builder;
+    newDrv.args = oldDrv.args;
+    newDrv.env = oldDrv.env;
+
+    foreach (DerivationInputs::iterator, i, oldDrv.inputDrvs) {
+        /* All input .drvs of the wanted .drv must be valid! */
+        assert(worker.store.isValidPath(i->first));
+        OldDerivation inputDrv = derivationFromPath(worker.store, i->first);
+        PathSet outputPaths;
+        foreach (StringSet::iterator, j, i->second) {
+            Path outPath = inputDrv.outputs[*j].path;
+            newDrv.inputs.insert(outPath);
+            outputPaths.insert(outPath);
+        }
+        knownDerivations.addOldDerivation(i->first, outputPaths);
+    }
+    if (repair) {
+        /* Get a closure which paths come from where */
+        PathSet known;
+        PathSet workSet;
+        foreach (DerivationInputs::iterator, i, oldDrv.inputDrvs)
+            workSet.insert(i->first);
+        while (!workSet.empty()) {
+            Path inDrvPath = *workSet.begin();
+            workSet.erase(inDrvPath);
+            if (known.count(inDrvPath))
+                continue;
+            known.insert(inDrvPath);
+            /* All input .drvs of the wanted .drv must be valid! */
+            assert(worker.store.isValidPath(inDrvPath));
+            OldDerivation inputDrv = derivationFromPath(worker.store, inDrvPath);
+            foreach (DerivationInputs::iterator, i, inputDrv.inputDrvs)
+                workSet.insert(i->first);
+            PathSet outputPaths;
+            foreach (OldDerivationOutputs::iterator, i, inputDrv.outputs)
+                outputPaths.insert(i->second.path);
+            knownDerivations.addOldDerivation(inDrvPath, outputPaths);
+        }
+    }
+
+    foreach (PathSet::iterator, i, oldDrv.inputSrcs)
+        newDrv.inputs.insert(*i);
+
+    foreach (OldDerivationOutputs::iterator, i, oldDrv.outputs) {
+        if (i->second.hash != "") {
+            bool recursive; HashType ignored; Hash hash;
+            i->second.parseHashInfo(recursive, ignored, hash);
+            newDrv.outputs[i->first] = DerivationOutput(hash, recursive);
+        } else
+            newDrv.outputs[i->first] = DerivationOutput();
+        newDrv.outputs[i->first].outPath = i->second.path;
+        newDrv.env.erase(i->first);
+    }
+
+    PathSet newWantedOutputPaths;
+    foreach (PathSet::iterator, i, wantedOutputPaths) {
+        DrvPathWithOutputs i2 = parseDrvPathWithOutputs(*i);
+        if (isDerivation(i2.first)) {
+            if (i2.second.empty()) {
+                newWantedOutputPaths.clear();
+                break;
+            }
+            foreach (StringSet::iterator, j, i2.second)
+                if (newDrv.outputs.find(*j) != newDrv.outputs.end())
+                    newWantedOutputPaths.insert(newDrv.outputs[*j].outPath);
+                else
+                    throw Error(
+                        format("Building requires non-existent output `%1%' from input derivation `%2%'")
+                        % *j % drvPath);
+        } else
+            newWantedOutputPaths.insert(*i);
+    }
+    drv = newDrv;
+    wantedOutputPaths = newWantedOutputPaths;
+
+    haveDerivation();
+}
+
+void DerivationGoal::haveDerivation()
+{
+    if (settings.readOnlyMode)
+        throw Error(format("cannot build derivation `%1%' - no write access to the Nix store") % drvPath);
+
+    foreach (DerivationOutputs::iterator, i, drv.outputs)
+        worker.store.addTempRoot(i->second.outPath);
 
     /* Check what outputs paths are not already valid. */
     PathSet invalidOutputs = checkPathValidity(false, repair);
@@ -1104,14 +1192,16 @@ void DerivationGoal::outputsSubstituted()
 
     /* Make sure checkPathValidity() from now on checks all
        outputs. */
-    wantedOutputs = PathSet();
+    wantedOutputPaths = PathSet();
 
     /* The inputs must be built before we can build this goal. */
-    foreach (DerivationInputs::iterator, i, drv.inputDrvs)
-        addWaitee(worker.makeDerivationGoal(i->first, i->second, repair));
-
-    foreach (PathSet::iterator, i, drv.inputSrcs)
-        addWaitee(worker.makeSubstitutionGoal(*i));
+    foreach (PathSet::iterator, i, drv.inputs) {
+        BuildMap::iterator j = knownDerivations.buildMap.find(*i);
+        if (j == knownDerivations.buildMap.end())
+            addWaitee(worker.makeSubstitutionGoal(*i));
+        else
+            addWaitee(worker.makeDerivationGoal(*j->second, *i, repair));
+    }
 
     if (waitees.empty()) /* to prevent hang (no wake-up event) */
         inputsRealised();
@@ -1129,36 +1219,23 @@ void DerivationGoal::repairClosure()
 
     /* Get the output closure. */
     PathSet outputClosure;
-    foreach (OldDerivationOutputs::iterator, i, drv.outputs)
-        computeFSClosure(worker.store, i->second.path, outputClosure);
+    foreach (DerivationOutputs::iterator, i, drv.outputs)
+        computeFSClosure(worker.store, i->second.outPath, outputClosure);
 
     /* Filter out our own outputs (which we have already checked). */
-    foreach (OldDerivationOutputs::iterator, i, drv.outputs)
-        outputClosure.erase(i->second.path);
-
-    /* Get all dependencies of this derivation so that we know which
-       derivation is responsible for which path in the output
-       closure. */
-    PathSet inputClosure;
-    computeFSClosure(worker.store, drvPath, inputClosure);
-    std::map<Path, Path> outputsToDrv;
-    foreach (PathSet::iterator, i, inputClosure)
-        if (isDerivation(*i)) {
-            OldDerivation drv = derivationFromPath(worker.store, *i);
-            foreach (OldDerivationOutputs::iterator, j, drv.outputs)
-                outputsToDrv[j->second.path] = *i;
-        }
+    foreach (DerivationOutputs::iterator, i, drv.outputs)
+        outputClosure.erase(i->second.outPath);
 
     /* Check each path (slow!). */
     PathSet broken;
     foreach (PathSet::iterator, i, outputClosure) {
         if (worker.store.pathContentsGood(*i)) continue;
         printMsg(lvlError, format("found corrupted or missing path `%1%' in the output closure of `%2%'") % *i % drvPath);
-        Path drvPath2 = outputsToDrv[*i];
-        if (drvPath2 == "")
+        BuildMap::iterator j = knownDerivations.buildMap.find(*i);
+        if (j == knownDerivations.buildMap.end())
             addWaitee(worker.makeSubstitutionGoal(*i, true));
         else
-            addWaitee(worker.makeDerivationGoal(drvPath2, PathSet(), true));
+            addWaitee(worker.makeDerivationGoal(*j->second, *i, true));
     }
 
     if (waitees.empty()) {
@@ -1201,31 +1278,14 @@ void DerivationGoal::inputsRealised()
        running the build hook. */
 
     /* The outputs are referenceable paths. */
-    foreach (OldDerivationOutputs::iterator, i, drv.outputs) {
-        debug(format("building path `%1%'") % i->second.path);
-        allPaths.insert(i->second.path);
+    foreach (DerivationOutputs::iterator, i, drv.outputs) {
+        debug(format("building path `%1%'") % i->second.outPath);
+        allPaths.insert(i->second.outPath);
     }
 
     /* Determine the full set of input paths. */
 
-    /* First, the input derivations. */
-    foreach (DerivationInputs::iterator, i, drv.inputDrvs) {
-        /* Add the relevant output closures of the input derivation
-           `*i' as input paths.  Only add the closures of output paths
-           that are specified as inputs. */
-        assert(worker.store.isValidPath(i->first));
-        OldDerivation inDrv = derivationFromPath(worker.store, i->first);
-        foreach (StringSet::iterator, j, i->second)
-            if (inDrv.outputs.find(*j) != inDrv.outputs.end())
-                computeFSClosure(worker.store, inDrv.outputs[*j].path, inputPaths);
-            else
-                throw Error(
-                    format("derivation `%1%' requires non-existent output `%2%' from input derivation `%3%'")
-                    % drvPath % *j % i->first);
-    }
-
-    /* Second, the input sources. */
-    foreach (PathSet::iterator, i, drv.inputSrcs)
+    foreach (PathSet::iterator, i, drv.inputs)
         computeFSClosure(worker.store, *i, inputPaths);
 
     debug(format("added input paths %1%") % showPaths(inputPaths));
@@ -1234,8 +1294,8 @@ void DerivationGoal::inputsRealised()
 
     /* Is this a fixed-output derivation? */
     fixedOutput = true;
-    foreach (OldDerivationOutputs::iterator, i, drv.outputs)
-        if (i->second.hash == "") fixedOutput = false;
+    foreach (DerivationOutputs::iterator, i, drv.outputs)
+        if (!i->second.fixedOutput) fixedOutput = false;
 
     /* Okay, try to build.  Note that here we don't wait for a build
        slot to become available, since we don't need one if there is a
@@ -1245,11 +1305,11 @@ void DerivationGoal::inputsRealised()
 }
 
 
-PathSet outputPaths(const OldDerivationOutputs & outputs)
+PathSet outputPaths(const DerivationOutputs & outputs)
 {
     PathSet paths;
-    foreach (OldDerivationOutputs::const_iterator, i, outputs)
-        paths.insert(i->second.path);
+    foreach (DerivationOutputs::const_iterator, i, outputs)
+        paths.insert(i->second.outPath);
     return paths;
 }
 
@@ -1273,10 +1333,10 @@ void DerivationGoal::tryToBuild()
        (It can't happen between here and the lockPaths() call below
        because we're not allowing multi-threading.)  If so, put this
        goal to sleep until another goal finishes, then try again. */
-    foreach (OldDerivationOutputs::iterator, i, drv.outputs)
-        if (pathIsLockedByMe(i->second.path)) {
+    foreach (DerivationOutputs::iterator, i, drv.outputs)
+        if (pathIsLockedByMe(i->second.outPath)) {
             debug(format("putting derivation `%1%' to sleep because `%2%' is locked by another goal")
-                % drvPath % i->second.path);
+                % drvPath % i->second.outPath);
             worker.waitForAnyGoal(shared_from_this());
             return;
         }
@@ -1309,8 +1369,8 @@ void DerivationGoal::tryToBuild()
 
     /* If any of the outputs already exist but are not valid, delete
        them. */
-    foreach (OldDerivationOutputs::iterator, i, drv.outputs) {
-        Path path = i->second.path;
+    foreach (DerivationOutputs::iterator, i, drv.outputs) {
+        Path path = i->second.outPath;
         if (worker.store.isValidPath(path)) continue;
         if (!pathExists(path)) continue;
         debug(format("removing unregistered path `%1%'") % path);
@@ -1320,8 +1380,8 @@ void DerivationGoal::tryToBuild()
     /* Check again whether any output previously failed to build,
        because some other process may have tried and failed before we
        acquired the lock. */
-    foreach (OldDerivationOutputs::iterator, i, drv.outputs)
-        if (pathFailed(i->second.path)) return;
+    foreach (DerivationOutputs::iterator, i, drv.outputs)
+        if (pathFailed(i->second.outPath)) return;
 
     /* Don't do a remote build if the derivation has the attribute
        `preferLocalBuild' set. */
@@ -1369,7 +1429,7 @@ void DerivationGoal::tryToBuild()
         buildUser.release();
         if (settings.printBuildTrace)
             printMsg(lvlError, format("@ build-failed %1% %2% %3% %4%")
-                % drvPath % drv.outputs["out"].path % 0 % e.msg());
+                % drvPath % drv.outputs["out"].outPath % 0 % e.msg());
         worker.permanentFailure = true;
         amDone(ecFailed);
         return;
@@ -1444,8 +1504,8 @@ void DerivationGoal::buildDone()
         /* Some cleanup per path.  We do this here and not in
            computeClosure() for convenience when the build has
            failed. */
-        foreach (OldDerivationOutputs::iterator, i, drv.outputs) {
-            Path path = i->second.path;
+        foreach (DerivationOutputs::iterator, i, drv.outputs) {
+            Path path = i->second.outPath;
 
             /* If the output was already valid, just skip (discard) it. */
             if (validPaths.find(path) != validPaths.end()) continue;
@@ -1542,10 +1602,10 @@ void DerivationGoal::buildDone()
         if (settings.printBuildTrace) {
             if (hook && hookError)
                 printMsg(lvlError, format("@ hook-failed %1% %2% %3% %4%")
-                    % drvPath % drv.outputs["out"].path % status % e.msg());
+                    % drvPath % drv.outputs["out"].outPath % status % e.msg());
             else
                 printMsg(lvlError, format("@ build-failed %1% %2% %3% %4%")
-                    % drvPath % drv.outputs["out"].path % 1 % e.msg());
+                    % drvPath % drv.outputs["out"].outPath % 1 % e.msg());
         }
 
         /* Register the outputs of this build as "failed" so we won't
@@ -1556,8 +1616,8 @@ void DerivationGoal::buildDone()
            communication problems with the remote machine) shouldn't
            be cached either. */
         if (settings.cacheFailure && !hookError && !fixedOutput)
-            foreach (OldDerivationOutputs::iterator, i, drv.outputs)
-                worker.store.registerFailedPath(i->second.path);
+            foreach (DerivationOutputs::iterator, i, drv.outputs)
+                worker.store.registerFailedPath(i->second.outPath);
 
         worker.permanentFailure = !hookError && !fixedOutput;
         amDone(ecFailed);
@@ -1569,7 +1629,7 @@ void DerivationGoal::buildDone()
 
     if (settings.printBuildTrace) {
         printMsg(lvlError, format("@ build-succeeded %1% %2%")
-            % drvPath % drv.outputs["out"].path);
+            % drvPath % drv.outputs["out"].outPath);
     }
 
     amDone(ecSuccess);
@@ -1621,23 +1681,17 @@ HookReply DerivationGoal::tryBuildHook()
     worker.hook.reset();
 
     /* Tell the hook all the inputs that have to be copied to the
-       remote system.  This unfortunately has to contain the entire
-       derivation closure to ensure that the validity invariant holds
-       on the remote system.  (I.e., it's unfortunate that we have to
-       list it since the remote system *probably* already has it.) */
-    PathSet allInputs;
-    allInputs.insert(inputPaths.begin(), inputPaths.end());
-    computeFSClosure(worker.store, drvPath, allInputs);
-
+       remote system. */
     string s;
-    foreach (PathSet::iterator, i, allInputs) s += *i + " ";
+    foreach (PathSet::iterator, i, drv.inputs) s += *i + " ";
+    if (isDerivation(drv.name)) s += drv.name;
     writeLine(hook->toHook.writeSide, s);
 
     /* Tell the hooks the outputs that have to be copied back from the
        remote system. */
     s = "";
-    foreach (OldDerivationOutputs::iterator, i, drv.outputs)
-        s += i->second.path + " ";
+    foreach (DerivationOutputs::iterator, i, drv.outputs)
+        s += i->second.outPath + " ";
     writeLine(hook->toHook.writeSide, s);
 
     hook->toHook.writeSide.close();
@@ -1652,7 +1706,7 @@ HookReply DerivationGoal::tryBuildHook()
 
     if (settings.printBuildTrace)
         printMsg(lvlError, format("@ build-started %1% %2% %3% %4%")
-            % drvPath % drv.outputs["out"].path % drv.platform % logFile);
+            % drvPath % drv.outputs["out"].outPath % drv.platform % logFile);
 
     return rpAccept;
 }
@@ -1711,6 +1765,10 @@ void DerivationGoal::startBuilder()
     /* Add all bindings specified in the derivation. */
     foreach (StringPairs::iterator, i, drv.env)
         env[i->first] = i->second;
+
+    /* Where should we build the outputs */
+    foreach (DerivationOutputs::iterator, i, drv.outputs)
+        env[i->first] = i->second.outPath;
 
     /* Create a temporary directory where the build will take
        place. */
@@ -1936,8 +1994,8 @@ void DerivationGoal::startBuilder()
            path that is in settings.dirsInChroot (typically the
            dependencies of /bin/sh).  Throw them out. */
         if (repair)
-            foreach (OldDerivationOutputs::iterator, i, drv.outputs)
-                dirsInChroot.erase(i->second.path);
+            foreach (DerivationOutputs::iterator, i, drv.outputs)
+                dirsInChroot.erase(i->second.outPath);
 
 #else
         throw Error("chroot builds are not supported on this platform");
@@ -2030,7 +2088,7 @@ void DerivationGoal::startBuilder()
 
     if (settings.printBuildTrace) {
         printMsg(lvlError, format("@ build-started %1% %2% %3% %4%")
-            % drvPath % drv.outputs["out"].path % drv.platform % logFile);
+            % drvPath % drv.outputs["out"].outPath % drv.platform % logFile);
     }
 }
 
@@ -2211,7 +2269,7 @@ void DerivationGoal::initChild()
 /* Parse a list of reference specifiers.  Each element must either be
    a store path, or the symbolic name of the output of the derivation
    (such as `out'). */
-PathSet parseReferenceSpecifiers(const OldDerivation & drv, string attr)
+PathSet parseReferenceSpecifiers(const Derivation & drv, string attr)
 {
     PathSet result;
     Paths paths = tokenizeString<Paths>(attr);
@@ -2219,7 +2277,7 @@ PathSet parseReferenceSpecifiers(const OldDerivation & drv, string attr)
         if (isStorePath(*i))
             result.insert(*i);
         else if (drv.outputs.find(*i) != drv.outputs.end())
-            result.insert(drv.outputs.find(*i)->second.path);
+            result.insert(drv.outputs.find(*i)->second.outPath);
         else throw BuildError(
             format("derivation contains an illegal reference specifier `%1%'")
             % *i);
@@ -2238,16 +2296,16 @@ void DerivationGoal::computeClosure()
        to do anything here. */
     if (hook) {
         bool allValid = true;
-        foreach (OldDerivationOutputs::iterator, i, drv.outputs)
-            if (!worker.store.isValidPath(i->second.path)) allValid = false;
+        foreach (DerivationOutputs::iterator, i, drv.outputs)
+            if (!worker.store.isValidPath(i->second.outPath)) allValid = false;
         if (allValid) return;
     }
 
     /* Check whether the output paths were created, and grep each
        output path to determine what other paths it references.  Also make all
        output paths read-only. */
-    foreach (OldDerivationOutputs::iterator, i, drv.outputs) {
-        Path path = i->second.path;
+    foreach (DerivationOutputs::iterator, i, drv.outputs) {
+        Path path = i->second.outPath;
         if (!pathExists(path)) {
             throw BuildError(
                 format("builder for `%1%' failed to produce output path `%2%'")
@@ -2264,12 +2322,8 @@ void DerivationGoal::computeClosure()
         /* Check that fixed-output derivations produced the right
            outputs (i.e., the content hash should match the specified
            hash). */
-        if (i->second.hash != "") {
-
-            bool recursive; HashType ht; Hash h;
-            i->second.parseHashInfo(recursive, ht, h);
-
-            if (!recursive) {
+        if (i->second.fixedOutput) {
+            if (!i->second.recursive) {
                 /* The output path should be a regular file without
                    execute permission. */
                 if (!S_ISREG(st.st_mode) || (st.st_mode & S_IXUSR) != 0)
@@ -2279,11 +2333,13 @@ void DerivationGoal::computeClosure()
             }
 
             /* Check the hash. */
-            Hash h2 = recursive ? hashPath(ht, path).first : hashFile(ht, path);
-            if (h != h2)
+            Hash h = i->second.recursive ?
+                hashPath(i->second.hash.type, path).first :
+                hashFile(i->second.hash.type, path);
+            if (i->second.hash != h)
                 throw BuildError(
                     format("output path `%1%' should have %2% hash `%3%', instead has `%4%'")
-                    % path % i->second.hashAlgo % printHash16or32(h) % printHash16or32(h2));
+                    % path % printHashType(i->second.hash.type) % printHash16or32(i->second.hash) % printHash16or32(h));
         }
 
         /* Get rid of all weird permissions. */
@@ -2329,12 +2385,12 @@ void DerivationGoal::computeClosure()
        paths referenced by each of them.  If there are cycles in the
        outputs, this will fail. */
     ValidPathInfos infos;
-    foreach (OldDerivationOutputs::iterator, i, drv.outputs) {
+    foreach (DerivationOutputs::iterator, i, drv.outputs) {
         ValidPathInfo info;
-        info.path = i->second.path;
-        info.hash = contentHashes[i->second.path].first;
-        info.narSize = contentHashes[i->second.path].second;
-        info.references = allReferences[i->second.path];
+        info.path = i->second.outPath;
+        info.hash = contentHashes[i->second.outPath].first;
+        info.narSize = contentHashes[i->second.outPath].second;
+        info.references = allReferences[i->second.outPath];
         info.deriver = drvPath;
         infos.push_back(info);
     }
@@ -2446,12 +2502,12 @@ void DerivationGoal::handleEOF(int fd)
 PathSet DerivationGoal::checkPathValidity(bool returnValid, bool checkHash)
 {
     PathSet result;
-    foreach (OldDerivationOutputs::iterator, i, drv.outputs) {
-        if (!wantOutput(i->first, wantedOutputs)) continue;
+    foreach (DerivationOutputs::iterator, i, drv.outputs) {
+        if (!wantedOutputPaths.empty() && !wantedOutputPaths.count(i->second.outPath)) continue;
         bool good =
-            worker.store.isValidPath(i->second.path) &&
-            (!checkHash || worker.store.pathContentsGood(i->second.path));
-        if (good == returnValid) result.insert(i->second.path);
+            worker.store.isValidPath(i->second.outPath) &&
+            (!checkHash || worker.store.pathContentsGood(i->second.outPath));
+        if (good == returnValid) result.insert(i->second.outPath);
     }
     return result;
 }
@@ -2914,15 +2970,26 @@ Worker::~Worker()
 }
 
 
-GoalPtr Worker::makeDerivationGoal(const Path & path, const StringSet & wantedOutputs, bool repair)
+GoalPtr Worker::makeDerivationGoal(const Derivation & drv, const Path & wantedOutputPath, bool repair)
 {
-    GoalPtr goal = derivationGoals[path].lock();
+    GoalPtr goal = derivationGoals[drv.hash()].lock();
     if (!goal) {
-        goal = GoalPtr(new DerivationGoal(path, wantedOutputs, *this, repair));
-        derivationGoals[path] = goal;
+        goal = GoalPtr(new DerivationGoal(drv, wantedOutputPath, *this, repair));
+        derivationGoals[drv.hash()] = goal;
         wakeUp(goal);
-    } else
-        (dynamic_cast<DerivationGoal *>(goal.get()))->addWantedOutputs(wantedOutputs);
+    } else {
+        if (isDerivation(drv.name) && store.isValidPath(drv.name)) {
+            OldDerivation oldDrv = derivationFromPath(store, drv.name);
+            DrvPathWithOutputs pathWithOutputs = parseDrvPathWithOutputs(wantedOutputPath);
+            if (pathWithOutputs.second.empty())
+                foreach (OldDerivationOutputs::iterator, i, oldDrv.outputs)
+                    (dynamic_cast<DerivationGoal *>(goal.get()))->addWantedOutputPath(i->second.path);
+            else
+                foreach (StringSet::iterator, i, pathWithOutputs.second)
+                    (dynamic_cast<DerivationGoal *>(goal.get()))->addWantedOutputPath(oldDrv.outputs[*i].path);
+        } else
+            (dynamic_cast<DerivationGoal *>(goal.get()))->addWantedOutputPath(wantedOutputPath);
+    }
     return goal;
 }
 
@@ -2939,13 +3006,27 @@ GoalPtr Worker::makeSubstitutionGoal(const Path & path, bool repair)
 }
 
 
-static void removeGoal(GoalPtr goal, WeakGoalMap & goalMap)
+static void removeGoal(GoalPtr goal, WeakDerivationGoalMap & goalMap)
 {
     /* !!! inefficient */
-    for (WeakGoalMap::iterator i = goalMap.begin();
+    for (WeakDerivationGoalMap::iterator i = goalMap.begin();
          i != goalMap.end(); )
         if (i->second.lock() == goal) {
-            WeakGoalMap::iterator j = i; ++j;
+            WeakDerivationGoalMap::iterator j = i; ++j;
+            goalMap.erase(i);
+            i = j;
+        }
+        else ++i;
+}
+
+
+static void removeGoal(GoalPtr goal, WeakSubstitutionGoalMap & goalMap)
+{
+    /* !!! inefficient */
+    for (WeakSubstitutionGoalMap::iterator i = goalMap.begin();
+         i != goalMap.end(); )
+        if (i->second.lock() == goal) {
+            WeakSubstitutionGoalMap::iterator j = i; ++j;
             goalMap.erase(i);
             i = j;
         }
@@ -3263,10 +3344,20 @@ void LocalStore::buildPaths(const PathSet & drvPaths, bool repair)
     Goals goals;
     foreach (PathSet::const_iterator, i, drvPaths) {
         DrvPathWithOutputs i2 = parseDrvPathWithOutputs(*i);
-        if (isDerivation(i2.first))
-            goals.insert(worker.makeDerivationGoal(i2.first, i2.second, repair));
-        else
-            goals.insert(worker.makeSubstitutionGoal(*i, repair));
+        if (isDerivation(i2.first)) {
+            Derivation drv = knownDerivations.addOldDerivation(i2.first, PathSet());
+            if (i2.second.empty())
+                goals.insert(worker.makeDerivationGoal(drv, i2.first, repair));
+            else
+                foreach (StringSet::iterator, j, i2.second)
+                    goals.insert(worker.makeDerivationGoal(drv, i2.first + "!" + *j, repair));
+        } else {
+            BuildMap::iterator j = knownDerivations.buildMap.find(*i);
+            if (j == knownDerivations.buildMap.end())
+                goals.insert(worker.makeSubstitutionGoal(*i, repair));
+            else
+                goals.insert(worker.makeDerivationGoal(*j->second, *i, repair));
+        }
     }
 
     worker.run(goals);

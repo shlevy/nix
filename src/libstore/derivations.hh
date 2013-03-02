@@ -99,7 +99,7 @@ struct KnownDerivations
     DerivationSet derivations;
     BuildMap buildMap;
     void addDerivation(Derivation & drv);
-    void addOldDerivation(Path drvPath, StringSet outputs);
+    const Derivation & addOldDerivation(const Path & drvPath, const PathSet & outputPaths);
 };
 
 /* Given a path, how do I build it? */

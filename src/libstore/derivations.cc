@@ -340,7 +340,7 @@ void KnownDerivations::addDerivation(Derivation & drv)
 }
 
 
-void KnownDerivations::addOldDerivation(Path drvPath, StringSet outputs)
+const Derivation & KnownDerivations::addOldDerivation(const Path & drvPath, const PathSet & outputPaths)
 {
     assert(isDerivation(drvPath));
     Derivation fakeDrv;
@@ -348,8 +348,9 @@ void KnownDerivations::addOldDerivation(Path drvPath, StringSet outputs)
        new-style Derivation (also it has no outputs) */
     fakeDrv.name = drvPath;
     Derivation const *drvPointer = &(*derivations.insert(fakeDrv).first);
-    foreach (StringSet::iterator, i, outputs)
-        buildMap[drvPath + "!" + *i] = drvPointer;
+    foreach (PathSet::iterator, i, outputPaths)
+        buildMap[*i] = drvPointer;
+    return *drvPointer;
 }
 
 
