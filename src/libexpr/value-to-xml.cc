@@ -88,25 +88,18 @@ static void printValueAsXML(EvalState & state, bool strict, bool location,
             
                 Bindings::iterator a = v.attrs->find(state.symbols.create("derivation"));
 
-                Path drvPath;
-                a = v.attrs->find(state.sDrvPath);
-                if (a != v.attrs->end()) {
-                    if (strict) state.forceValue(*a->value);
-                    if (a->value->type == tString)
-                        xmlAttrs["drvPath"] = drvPath = a->value->string.s;
-                }
-        
+                Path outPath;
                 a = v.attrs->find(state.sOutPath);
                 if (a != v.attrs->end()) {
                     if (strict) state.forceValue(*a->value);
                     if (a->value->type == tString)
-                        xmlAttrs["outPath"] = a->value->string.s;
+                        xmlAttrs["outPath"] = outPath = a->value->string.s;
                 }
 
                 XMLOpenElement _(doc, "derivation", xmlAttrs);
 
-                if (drvPath != "" && drvsSeen.find(drvPath) == drvsSeen.end()) {
-                    drvsSeen.insert(drvPath);
+                if (outPath != "" && drvsSeen.find(outPath) == drvsSeen.end()) {
+                    drvsSeen.insert(outPath);
                     showAttrs(state, strict, location, *v.attrs, doc, context, drvsSeen);
                 } else
                     doc.writeEmptyElement("repeated");
