@@ -440,10 +440,35 @@ Paths RemoteStore::importPaths(bool requireSignature, Source & source)
 void RemoteStore::buildPaths(const PathSet & drvPaths, bool repair)
 {
     if (repair) throw Error("repairing is not supported when building through the Nix daemon");
+
+    /* Get a closure of all derivations needed to build these paths */
+    DerivationSet neededDerivations;
+    PathSet workSet;
+    PathSet known;
+    foreach (PathSet::const_iterator, i, drvPaths)
+        workSet.insert(*i);
+    while (!workSet.empty()) {
+        Path wantedPath = *workSet.begin();
+        workSet.erase(wantedPath);
+        if (known.count(wantedPath))
+            continue;
+        known.insert(wantedPath);
+        addTempRoot(wantedPath);
+        if (isValidPath(wantedPath))
+            continue;
+        BuildMap::iterator i = knownDerivations.buildMap.find(wantedPath);
+        if (i == knownDerivations.buildMap.end())
+            continue;
+        Derivation drv = *i->second;
+        neededDerivations.insert(drv);
+        foreach (PathSet::iterator, j, drv.inputs)
+            workSet.insert(*j);
+    }
+
     openConnection();
     if (GET_PROTOCOL_MINOR(daemonVersion) >= 14) {
         writeInt(wopAddDerivations, to);
-        foreach (DerivationSet::iterator, i, knownDerivations.derivations) {
+        foreach (DerivationSet::iterator, i, neededDerivations) {
             writeString(i->name, to);
             foreach (DerivationOutputs::const_iterator, j, i->outputs) {
                 writeString(j->first, to);
