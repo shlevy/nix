@@ -328,13 +328,14 @@ bool wantOutput(const string & output, const std::set<string> & wanted)
 
 void KnownDerivations::addDerivation(Derivation & drv)
 {
-    Derivation const *drvPointer = &(*derivations.insert(drv).first);
-    foreach (DerivationOutputs::iterator, i, drv.outputs) {
+    foreach (DerivationOutputs::iterator, i, drv.outputs)
         if (i->second.fixedOutput)
             i->second.outPath = makeFixedOutputPath(i->second.recursive, i->second.hash.type,
                     i->second.hash, drv.name + (i->first == "out" ? "" : "-" + i->first));
         else
             i->second.outPath = makeOutputPath(i->first, drv.hash(), drv.name);
+    Derivation const *drvPointer = &(*derivations.insert(drv).first);
+    foreach (DerivationOutputs::iterator, i, drv.outputs) {
         buildMap[i->second.outPath] = drvPointer;
     }
 }

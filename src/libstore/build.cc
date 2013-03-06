@@ -394,18 +394,6 @@ static void commonChildInit(Pipe & logPipe)
 }
 
 
-/* Convert a string list to an array of char pointers.  Careful: the
-   string list should outlive the array. */
-const char * * strings2CharPtrs(const Strings & ss)
-{
-    const char * * arr = new const char * [ss.size() + 1];
-    const char * * p = arr;
-    foreach (Strings::const_iterator, i, ss) *p++ = i->c_str();
-    *p = 0;
-    return arr;
-}
-
-
 /* Restore default handling of SIGPIPE, otherwise some programs will
    randomly say "Broken pipe". */
 static void restoreSIGPIPE()

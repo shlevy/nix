@@ -366,6 +366,7 @@ AC_CONFIG_FILES([Makefile
    src/nix-hash/Makefile
    src/libexpr/Makefile
    src/nix-instantiate/Makefile
+   src/nix-build/Makefile
    src/nix-env/Makefile
    src/nix-daemon/Makefile
    src/nix-setuid-helper/Makefile

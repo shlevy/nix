@@ -94,9 +94,12 @@ void queryMissing(StoreAPI & store, const PathSet & targets,
        - Repeat until ‘todo’ is empty.
     */
 
+    PathSet wantedPaths(targets.begin(), targets.end());
+
     while (!todo.empty()) {
 
-        PathSet query, todoDrv, todoNonDrv;
+        PathSet query, todoOldDrv, todoNonDrv;
+        DerivationSet todoDrv;
 
         foreach (PathSet::iterator, i, todo) {
             if (done.find(*i) != done.end()) continue;
@@ -119,14 +122,20 @@ void queryMissing(StoreAPI & store, const PathSet & targets,
                         invalid.insert(j->second.path);
                 if (invalid.empty()) continue;
 
-                todoDrv.insert(*i);
+                todoOldDrv.insert(*i);
                 if (settings.useSubstitutes) query.insert(invalid.begin(), invalid.end());
             }
 
             else {
                 if (store.isValidPath(*i)) continue;
-                query.insert(*i);
-                todoNonDrv.insert(*i);
+                BuildMap::iterator j = knownDerivations.buildMap.find(*i);
+                if (j == knownDerivations.buildMap.end()) {
+                    query.insert(*i);
+                    todoNonDrv.insert(*i);
+                } else {
+                    if (settings.useSubstitutes) query.insert(*i);
+                    todoDrv.insert(*j->second);
+                }
             }
         }
 
@@ -135,7 +144,7 @@ void queryMissing(StoreAPI & store, const PathSet & targets,
         SubstitutablePathInfos infos;
         store.querySubstitutablePathInfos(query, infos);
 
-        foreach (PathSet::iterator, i, todoDrv) {
+        foreach (PathSet::iterator, i, todoOldDrv) {
             DrvPathWithOutputs i2 = parseDrvPathWithOutputs(*i);
 
             // FIXME: cache this
@@ -161,6 +170,34 @@ void queryMissing(StoreAPI & store, const PathSet & targets,
                 todo.insert(drv.inputSrcs.begin(), drv.inputSrcs.end());
                 foreach (DerivationInputs::iterator, j, drv.inputDrvs)
                     todo.insert(makeDrvPathWithOutputs(j->first, j->second));
+            } else
+                todoNonDrv.insert(outputs.begin(), outputs.end());
+        }
+
+        foreach (DerivationSet::iterator, i, todoDrv) {
+            PathSet outputs;
+            bool mustBuild = false;
+            if (settings.useSubstitutes) {
+                foreach (DerivationOutputs::const_iterator, j, i->outputs) {
+                    if (wantedPaths.find(j->second.outPath) == wantedPaths.end())
+                        continue;
+                    if (!store.isValidPath(j->second.outPath)) {
+                        if (infos.find(j->second.outPath) == infos.end())
+                            mustBuild = true;
+                        else
+                            outputs.insert(j->second.outPath);
+                    }
+                }
+            } else
+                mustBuild = true;
+
+            if (mustBuild) {
+                foreach (DerivationOutputs::const_iterator, j, i->outputs)
+                    willBuild.insert(j->second.outPath);
+                foreach (PathSet::iterator, j, i->inputs) {
+                    wantedPaths.insert(*j);
+                    todo.insert(*j);
+                }
             } else
                 todoNonDrv.insert(outputs.begin(), outputs.end());
         }

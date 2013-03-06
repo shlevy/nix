@@ -345,4 +345,7 @@ string decodeOctalEscaped(const string & s);
 void ignoreException();
 
 
+/* Convert a string list to an array of char pointers.  Careful: the
+   string list should outlive the array. */
+const char * * strings2CharPtrs(const Strings & ss);
 }

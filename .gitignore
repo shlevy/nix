@@ -55,7 +55,6 @@ Makefile.in
 /scripts/nix-prefetch-url
 /scripts/nix-install-package
 /scripts/nix-channel
-/scripts/nix-build
 /scripts/nix-copy-closure
 /scripts/nix-generate-patches
 /scripts/NixConfig.pm
@@ -92,6 +91,9 @@ Makefile.in
 
 # /src/nix-instantiate/
 /src/nix-instantiate/nix-instantiate
+
+# /src/nix-build/
+/src/nix-build/nix-build
 
 # /src/nix-log2xml/
 /src/nix-log2xml/nix-log2xml
