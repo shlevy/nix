@@ -429,25 +429,10 @@ static void prim_derivationStrict(EvalState & state, Value * * args, Value & v)
     printMsg(lvlChatty, format("instantiated `%1%'")
         % drv.name);
 
-    bool allValid = true;
     state.mkAttrs(v, drv.outputs.size());
-    foreach (DerivationOutputs::iterator, i, drv.outputs) {
+    foreach (DerivationOutputs::iterator, i, drv.outputs)
         mkString(*state.allocAttr(v, state.symbols.create(i->first)),
             i->second.outPath, singleton<PathSet>(i->second.outPath));
-
-        if (!settings.readOnlyMode)
-            store->addTempRoot(i->second.outPath);
-
-        if (!store->isValidPath(i->second.outPath))
-            allValid = false;
-    }
-
-    /* Optimization: If all output paths are valid already, we don't need
-       to keep track of this derivation (or send it to the daemon).
-       TODO: do something similar for substitutions */
-    if (allValid)
-        knownDerivations.removeDerivation(drv);
-
     v.attrs->sort();
 }
 
