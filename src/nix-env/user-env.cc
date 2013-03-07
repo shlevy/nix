@@ -41,8 +41,8 @@ bool createUserEnv(EvalState & state, DrvInfos & elems,
        exist already. */
     PathSet drvsToBuild;
     foreach (DrvInfos::const_iterator, i, elems)
-        if (i->queryDrvPath(state) != "")
-            drvsToBuild.insert(i->queryDrvPath(state));
+        if (i->queryOutPath(state) != "")
+            drvsToBuild.insert(i->queryOutPath(state));
 
     debug(format("building user environment dependencies"));
     store->buildPaths(drvsToBuild, state.repair);
@@ -54,10 +54,8 @@ bool createUserEnv(EvalState & state, DrvInfos & elems,
     unsigned int n = 0;
     foreach (DrvInfos::iterator, i, elems) {
         /* Create a pseudo-derivation containing the name, system,
-           output paths, and optionally the derivation path, as well
+           ant output paths, as well
            as the meta attributes. */
-        Path drvPath = keepDerivations ? i->queryDrvPath(state) : "";
-
         Value & v(*state.allocValue());
         manifest.list.elems[n++] = &v;
         state.mkAttrs(v, 16);
@@ -67,8 +65,6 @@ bool createUserEnv(EvalState & state, DrvInfos & elems,
         if (!i->system.empty())
             mkString(*state.allocAttr(v, state.sSystem), i->system);
         mkString(*state.allocAttr(v, state.sOutPath), i->queryOutPath(state));
-        if (drvPath != "")
-            mkString(*state.allocAttr(v, state.sDrvPath), i->queryDrvPath(state));
 
         // Copy each output.
         DrvInfo::Outputs outputs = i->queryOutputs(state);
@@ -115,8 +111,6 @@ bool createUserEnv(EvalState & state, DrvInfos & elems,
 
         vMeta.attrs->sort();
         v.attrs->sort();
-
-        if (drvPath != "") references.insert(drvPath);
     }
 
     /* Also write a copy of the list of user environment elements to
@@ -147,7 +141,7 @@ bool createUserEnv(EvalState & state, DrvInfos & elems,
 
     /* Realise the resulting store expression. */
     debug("building user environment");
-    store->buildPaths(singleton<PathSet>(topLevelDrv.queryDrvPath(state)), state.repair);
+    store->buildPaths(singleton<PathSet>(topLevelDrv.queryOutPath(state)), state.repair);
 
     /* Switch the current user environment to the output path. */
     PathLocks lock;
@@ -251,7 +245,6 @@ static void readLegacyManifest(const Path & path, DrvInfos & elems)
                 string value = parseStr(str);
                 if (name == "name") elem.name = value;
                 else if (name == "outPath") elem.setOutPath(value);
-                else if (name == "drvPath") elem.setDrvPath(value);
                 else if (name == "system") elem.system = value;
             }
 

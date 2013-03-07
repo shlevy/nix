@@ -92,7 +92,7 @@ class EvalState
 public:
     SymbolTable symbols;
 
-    const Symbol sWith, sOutPath, sDrvPath, sType, sMeta, sName,
+    const Symbol sWith, sOutPath, sType, sMeta, sName,
         sSystem, sOverrides, sOutputs, sOutputName, sIgnoreNulls;
 
     /* If set, force copying files to the Nix store even if they

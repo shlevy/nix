@@ -29,7 +29,6 @@ public:
     typedef std::map<string, Path> Outputs;
 
 private:
-    string drvPath;
     string outPath;
     string outputName;
     Outputs outputs;
@@ -49,17 +48,11 @@ public:
 
     DrvInfo() : metaInfoRead(false), failed(false), attrs(0) { };
 
-    string queryDrvPath(EvalState & state) const;
     string queryOutPath(EvalState & state) const;
     string queryOutputName(EvalState & state) const;
     Outputs queryOutputs(EvalState & state);
     MetaInfo queryMetaInfo(EvalState & state) const;
     MetaValue queryMetaInfo(EvalState & state, const string & name) const;
-
-    void setDrvPath(const string & s)
-    {
-        drvPath = s;
-    }
 
     void setOutPath(const string & s)
     {

@@ -386,7 +386,6 @@ static void queryInstSources(EvalState & state,
                     name = string(name, dash + 1);
 
                 if (isDerivation(path)) {
-                    elem.setDrvPath(path);
                     elem.setOutPath(findOutput(derivationFromPath(*store, path), "out"));
                     if (name.size() >= drvExtension.size() &&
                         string(name, name.size() - drvExtension.size()) == drvExtension)
@@ -428,13 +427,8 @@ static void queryInstSources(EvalState & state,
 static void printMissing(EvalState & state, const DrvInfos & elems)
 {
     PathSet targets;
-    foreach (DrvInfos::const_iterator, i, elems) {
-        Path drvPath = i->queryDrvPath(state);
-        if (drvPath != "")
-            targets.insert(drvPath);
-        else
-            targets.insert(i->queryOutPath(state));
-    }
+    foreach (DrvInfos::const_iterator, i, elems)
+        targets.insert(i->queryOutPath(state));
 
     printMissing(*store, targets);
 }
@@ -697,8 +691,8 @@ static void opSet(Globals & globals,
 
     DrvInfo & drv(elems.front());
 
-    if (drv.queryDrvPath(globals.state) != "") {
-        PathSet paths = singleton<PathSet>(drv.queryDrvPath(globals.state));
+    if (drv.queryOutPath(globals.state) != "") {
+        PathSet paths = singleton<PathSet>(drv.queryOutPath(globals.state));
         printMissing(*store, paths);
         if (globals.dryRun) return;
         store->buildPaths(paths, globals.state.repair);
@@ -863,7 +857,6 @@ static void opQuery(Globals & globals,
     bool printName = true;
     bool printAttrPath = false;
     bool printSystem = false;
-    bool printDrvPath = false;
     bool printOutPath = false;
     bool printDescription = false;
     bool printMeta = false;
@@ -881,7 +874,6 @@ static void opQuery(Globals & globals,
         else if (arg == "--system") printSystem = true;
         else if (arg == "--description") printDescription = true;
         else if (arg == "--compare-versions" || arg == "-c") compareVersions = true;
-        else if (arg == "--drv-path") printDrvPath = true;
         else if (arg == "--out-path") printOutPath = true;
         else if (arg == "--meta") printMeta = true;
         else if (arg == "--installed") source = sInstalled;
@@ -1035,14 +1027,6 @@ static void opQuery(Globals & globals,
             }
             else if (printSystem)
                 columns.push_back(i->system);
-
-            if (printDrvPath) {
-                string drvPath = i->queryDrvPath(globals.state);
-                if (xmlOutput) {
-                    if (drvPath != "") attrs["drvPath"] = drvPath;
-                } else
-                    columns.push_back(drvPath == "" ? "-" : drvPath);
-            }
 
             if (printOutPath && !xmlOutput) {
                 DrvInfo::Outputs outputs = i->queryOutputs(globals.state);

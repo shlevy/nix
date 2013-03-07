@@ -6,17 +6,6 @@
 namespace nix {
 
 
-string DrvInfo::queryDrvPath(EvalState & state) const
-{
-    if (drvPath == "" && attrs) {
-        Bindings::iterator i = attrs->find(state.sDrvPath);
-        PathSet context;
-        (string &) drvPath = i != attrs->end() ? state.coerceToPath(*i->value, context) : "";
-    }
-    return drvPath;
-}
-
-
 string DrvInfo::queryOutPath(EvalState & state) const
 {
     if (outPath == "" && attrs) {
