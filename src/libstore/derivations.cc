@@ -37,7 +37,7 @@ Path writeDerivation(StoreAPI & store,
        (that can be missing (of course) and should not necessarily be
        held during a garbage collection). */
     string suffix = name + drvExtension;
-    string contents = unparseDerivation(drv);
+    string contents = unparseOldDerivation(drv);
     return settings.readOnlyMode
         ? computeStorePathForText(suffix, contents, references)
         : store.addTextToStore(suffix, contents, references, repair);
@@ -62,7 +62,7 @@ static StringSet parseStrings(std::istream & str, bool arePaths)
 }
 
 
-OldDerivation parseDerivation(const string & s)
+OldDerivation parseOldDerivation(const string & s)
 {
     OldDerivation drv;
     std::istringstream str(s);
@@ -138,7 +138,7 @@ static void printStrings(string & res, ForwardIterator i, ForwardIterator j)
 }
 
 
-string unparseDerivation(const OldDerivation & drv)
+string unparseOldDerivation(const OldDerivation & drv)
 {
     string s;
     s.reserve(65536);
@@ -240,7 +240,7 @@ Hash hashDerivationModulo(StoreAPI & store, OldDerivation drv)
         Hash h = drvHashes[i->first];
         if (h.type == htUnknown) {
             assert(store.isValidPath(i->first));
-            OldDerivation drv2 = parseDerivation(readFile(i->first));
+            OldDerivation drv2 = parseOldDerivation(readFile(i->first));
             h = hashDerivationModulo(store, drv2);
             drvHashes[i->first] = h;
         }
@@ -248,7 +248,7 @@ Hash hashDerivationModulo(StoreAPI & store, OldDerivation drv)
     }
     drv.inputDrvs = inputs2;
 
-    return hashString(htSHA256, unparseDerivation(drv));
+    return hashString(htSHA256, unparseOldDerivation(drv));
 }
 
 

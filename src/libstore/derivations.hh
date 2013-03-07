@@ -114,10 +114,10 @@ Path writeDerivation(StoreAPI & store,
     const OldDerivation & drv, const string & name, bool repair = false);
 
 /* Parse a derivation. */
-OldDerivation parseDerivation(const string & s);
+OldDerivation parseOldDerivation(const string & s);
 
 /* Print a derivation. */
-string unparseDerivation(const OldDerivation & drv);
+string unparseOldDerivation(const OldDerivation & drv);
 
 /* Check whether a file name ends with the extensions for
    derivations. */

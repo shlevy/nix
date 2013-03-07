@@ -615,7 +615,7 @@ unsigned long long LocalStore::addValidPath(const ValidPathInfo & info, bool che
        efficiently query whether a path is an output of some
        derivation. */
     if (isDerivation(info.path)) {
-        OldDerivation drv = parseDerivation(readFile(info.path));
+        OldDerivation drv = parseOldDerivation(readFile(info.path));
 
         /* Verify that the output paths in the derivation are correct
            (i.e., follow the scheme for computing output paths from

@@ -11,7 +11,7 @@ OldDerivation derivationFromPath(StoreAPI & store, const Path & drvPath)
 {
     assertStorePath(drvPath);
     store.ensurePath(drvPath);
-    return parseDerivation(readFile(drvPath));
+    return parseOldDerivation(readFile(drvPath));
 }
 
 
