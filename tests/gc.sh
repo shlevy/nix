@@ -1,7 +1,6 @@
 source common.sh
 
-drvPath=$(nix-instantiate dependencies.nix)
-outPath=$(nix-store -rvv "$drvPath")
+outPath=$(nix-build -vv dependencies.nix --no-out-link)
 
 # Set a GC root.
 rm -f "$NIX_STATE_DIR"/gcroots/foo
@@ -9,7 +8,6 @@ ln -sf $outPath "$NIX_STATE_DIR"/gcroots/foo
 
 nix-store --gc --print-roots | grep $outPath
 nix-store --gc --print-live | grep $outPath
-nix-store --gc --print-dead | grep $drvPath
 if nix-store --gc --print-dead | grep $outPath; then false; fi
 
 nix-store --gc --print-dead
@@ -26,9 +24,6 @@ nix-collect-garbage
 # Check that the root and its dependencies haven't been deleted.
 cat $outPath/foobar
 cat $outPath/input-2/bar
-
-# Check that the derivation has been GC'd.
-if test -e $drvPath; then false; fi
 
 rm "$NIX_STATE_DIR"/gcroots/foo
 

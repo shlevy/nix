@@ -2,11 +2,10 @@ source common.sh
 
 clearStore
 
-drvPath=$(nix-instantiate dependencies.nix)
-outPath=$(nix-store -r $drvPath)
+outPath=$(nix-build dependencies.nix --no-out-link)
 
-echo "pushing $drvPath"
+echo "pushing $outPath"
 
 mkdir -p $TEST_ROOT/cache
 
-nix-push --dest $TEST_ROOT/cache --manifest $drvPath --bzip2
+nix-push --dest $TEST_ROOT/cache --manifest $outPath --bzip2

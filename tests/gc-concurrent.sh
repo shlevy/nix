@@ -2,28 +2,24 @@ source common.sh
 
 clearStore
 
-drvPath1=$(nix-instantiate gc-concurrent.nix -A test1)
-outPath1=$(nix-store -q $drvPath1)
+outPath1=$(nix-evaluate gc-concurrent.nix -A test1.outPath | tr -d \")
 
-drvPath2=$(nix-instantiate gc-concurrent.nix -A test2)
-outPath2=$(nix-store -q $drvPath2)
+outPath2=$(nix-evaluate gc-concurrent.nix -A test2.outPath | tr -d \")
 
-drvPath3=$(nix-instantiate simple.nix)
-outPath3=$(nix-store -r $drvPath3)
+outPath3=$(nix-build simple.nix --no-out-link)
 
 ! test -e $outPath3.lock
 touch $outPath3.lock
 
 rm -f "$NIX_STATE_DIR"/gcroots/foo*
-ln -s $drvPath2 "$NIX_STATE_DIR"/gcroots/foo
 ln -s $outPath3 "$NIX_STATE_DIR"/gcroots/foo2
 
 # Start build #1 in the background.  It starts immediately.
-nix-store -rvv "$drvPath1" &
+nix-build -vv gc-concurrent.nix -A test1 --no-out-link &
 pid1=$!
 
 # Start build #2 in the background after 10 seconds.
-(sleep 10 && nix-store -rvv "$drvPath2") &
+(sleep 10 && nix-build -vv gc-concurrent.nix -A test2 --no-out-link) &
 pid2=$!
 
 # Run the garbage collector while the build is running.

@@ -86,7 +86,7 @@ in
 
       # And a parallel build.
       my ($out1, $out2) = split /\s/,
-          $client->succeed("nix-store -r \$(nix-instantiate ${expr nodes.client.config 2} ${expr nodes.client.config 3})");
+          $client->succeed("nix-build ${expr nodes.client.config 2} ${expr nodes.client.config 3} --no-out-link");
       $slave1->succeed("test -e $out1 -o -e $out2");
       $slave2->succeed("test -e $out1 -o -e $out2");
 

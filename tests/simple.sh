@@ -1,12 +1,8 @@
 source common.sh
 
-drvPath=$(nix-instantiate simple.nix)
+test "$(nix-evaluate -A system simple.nix | tr -d \")" = "$system"
 
-test "$(nix-store -q --binding system "$drvPath")" = "$system"
-
-echo "derivation is $drvPath"
-
-outPath=$(nix-store -rvv "$drvPath")
+outPath=$(nix-build -vv simple.nix --no-out-link)
 
 echo "output path is $outPath"
 
@@ -17,9 +13,3 @@ if test "$text" != "Hello World!"; then exit 1; fi
 # be deleteable.
 nix-store --delete $outPath
 if test -e $outPath/hello; then false; fi
-
-outPath="$(NIX_STORE_DIR=/foo nix-instantiate --readonly-mode hash-check.nix)"
-if test "$outPath" != "/foo/lfy1s6ca46rm5r6w4gg9hc0axiakjcnm-dependencies.drv"; then
-    echo "hashDerivationModulo appears broken, got $outPath"
-    exit 1
-fi

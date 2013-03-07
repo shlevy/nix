@@ -2,7 +2,7 @@ source common.sh
 
 clearStore
 
-if nix-instantiate --readonly-mode ./import-derivation.nix; then
+if nix-evaluate --readonly-mode -A outPath ./import-derivation.nix; then
     echo "read-only evaluation of an imported derivation unexpectedly failed"
     exit 1
 fi

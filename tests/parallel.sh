@@ -27,9 +27,7 @@ clearStore
 
 rm -f $SHARED.cur $SHARED.max
 
-drvPath=$(nix-instantiate parallel.nix --argstr sleepTime 15)
-
-cmd="nix-store -j1 -r $drvPath"
+cmd="nix-build -j1 parallel.nix --argstr sleepTime 15 --no-out-link"
 
 $cmd &
 pid1=$!

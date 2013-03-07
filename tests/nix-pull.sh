@@ -9,8 +9,7 @@ clearStore
 clearManifests
 pullCache
 
-drvPath=$(nix-instantiate dependencies.nix)
-outPath=$(nix-store -q $drvPath)
+outPath=$(nix-evaluate -A outPath dependencies.nix | tr -d \")
 
 echo "building $outPath using substitutes..."
 nix-store -r $outPath
@@ -21,13 +20,12 @@ clearStore
 clearManifests
 pullCache
 
-echo "building $drvPath using substitutes..."
-nix-store -r $drvPath
+echo "building $outPath's derivation using substitutes..."
+nix-build dependencies.nix --no-out-link
 
 cat $outPath/input-2/bar
 
 # Check that the derivers are set properly.
-test $(nix-store -q --deriver "$outPath") = "$drvPath"
 nix-store -q --deriver $(readLink $outPath/input-2) | grep -q -- "-input-2.drv"
 
 clearManifests

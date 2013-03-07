@@ -15,11 +15,11 @@ echo 'testing bad...'
 nix-build fixed.nix -A bad --no-out-link && fail "should fail"
 
 echo 'testing reallyBad...'
-nix-instantiate fixed.nix -A reallyBad && fail "should fail"
+nix-evaluate fixed.nix -A reallyBad.outPath && fail "should fail"
 
 # While we're at it, check attribute selection a bit more.
 echo 'testing attribute selection...'
-test $(nix-instantiate fixed.nix -A good.1 | wc -l) = 1
+test $(nix-evaluate fixed.nix -A good.1.outPath | wc -l) = 1
 
 # Test parallel builds of derivations that produce the same output.
 # Only one should run at the same time.
