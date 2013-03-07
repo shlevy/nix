@@ -89,8 +89,8 @@ Makefile.in
 # /src/nix-hash/
 /src/nix-hash/nix-hash
 
-# /src/nix-instantiate/
-/src/nix-instantiate/nix-instantiate
+# /src/nix-evaluate/
+/src/nix-evaluate/nix-evaluate
 
 # /src/nix-build/
 /src/nix-build/nix-build

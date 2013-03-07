@@ -4,7 +4,7 @@
 
 namespace nix {
 
-/* Some common option parsing between nix-env and nix-instantiate. */
+/* Some common option parsing between nix-env, nix-build and nix-evaluate. */
 bool parseOptionArg(const string & arg, Strings::iterator & i,
     const Strings::iterator & argsEnd, EvalState & state,
     Bindings & autoArgs);

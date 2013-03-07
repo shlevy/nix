@@ -365,7 +365,7 @@ AC_CONFIG_FILES([Makefile
    src/nix-store/Makefile
    src/nix-hash/Makefile
    src/libexpr/Makefile
-   src/nix-instantiate/Makefile
+   src/nix-evaluate/Makefile
    src/nix-build/Makefile
    src/nix-env/Makefile
    src/nix-daemon/Makefile

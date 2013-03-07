@@ -1,7 +1,7 @@
-bin_PROGRAMS = nix-instantiate
+bin_PROGRAMS = nix-evaluate
 
-nix_instantiate_SOURCES = nix-instantiate.cc
-nix_instantiate_LDADD = ../libmain/libmain.la ../libexpr/libexpr.la \
+nix_evaluate_SOURCES = nix-evaluate.cc
+nix_evaluate_LDADD = ../libmain/libmain.la ../libexpr/libexpr.la \
  ../libstore/libstore.la ../libutil/libutil.la \
  ../boost/format/libformat.la
 
