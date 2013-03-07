@@ -252,47 +252,96 @@ Hash hashDerivationModulo(StoreAPI & store, OldDerivation drv)
 }
 
 
+Derivation parseDerivation(const string & s)
+{
+    Derivation drv;
+    std::istringstream str(s);
+    expect(str, "Derive2(");
+    drv.name = parseString(str);
+
+    expect(str, ",[");
+    /* Parse the list of outputs. */
+    while (!endOfList(str)) {
+        expect(str, "("); string id = parseString(str);
+        if (str.peek() == ',') {
+            expect(str, ","); bool recursive = (parseString(str) == "recursive");
+            expect(str, ","); HashType ht = parseHashType(parseString(str));
+            expect(str, ","); Hash h = parseHash(ht, parseString(str));
+            drv.outputs[id] = DerivationOutput(h, recursive);
+        } else
+            drv.outputs[id] = DerivationOutput();
+        expect(str, ")");
+    }
+
+    expect(str, ",["); drv.inputs = parseStrings(str, true);
+    expect(str, ","); drv.platform = parseString(str);
+    expect(str, ","); drv.builder = parseString(str);
+
+    /* Parse the builder arguments. */
+    expect(str, ",[");
+    while (!endOfList(str))
+        drv.args.push_back(parseString(str));
+
+    /* Parse the environment variables. */
+    expect(str, ",[");
+    while (!endOfList(str)) {
+        expect(str, "("); string name = parseString(str);
+        expect(str, ","); string value = parseString(str);
+        expect(str, ")");
+        drv.env[name] = value;
+    }
+
+    expect(str, ")");
+    return drv;
+}
+
+
+string printDerivation (const Derivation & drv)
+{
+    string s;
+    s.reserve(65536);
+    s += "Derive2(";
+
+    printString(s, drv.name);
+
+    s += ",[";
+    bool first = true;
+    foreach (DerivationOutputs::const_iterator, i, drv.outputs) {
+        if (first) first = false; else s += ',';
+        s += '('; printString(s, i->first);
+        if (i->second.fixedOutput) {
+            s += ','; printString(s, i->second.recursive ? "recursive" : "flat");
+            s += ','; printString(s, printHashType(i->second.hash.type));
+            s += ','; printString(s, printHash(i->second.hash));
+        }
+        s += ')';
+    }
+
+    s += "],";
+    printStrings(s, drv.inputs.begin(), drv.inputs.end());
+
+    s += ','; printString(s, drv.platform);
+    s += ','; printString(s, drv.builder);
+    s += ','; printStrings(s, drv.args.begin(), drv.args.end());
+
+    s += ",[";
+    first = true;
+    foreach (StringPairs::const_iterator, i, drv.env) {
+        if (first) first = false; else s += ',';
+        s += '('; printString(s, i->first);
+        s += ','; printString(s, i->second);
+        s += ')';
+    }
+
+    s += "])";
+    return s;
+}
+
+
 Hash Derivation::hash() const
 {
-    if (cachedHash.type == htUnknown) {
-        string s;
-        s.reserve(65536);
-        s += "Derive([";
-
-        printString(s, name); s += "],";
-
-        bool first = true;
-        foreach (DerivationOutputs::const_iterator, i, outputs) {
-            if (first) first = false; else s += ',';
-            s += '('; printString(s, i->first);
-            if (i->second.fixedOutput) {
-                s += ','; printString(s, i->second.recursive ? "recursive" : "flat");
-                s += ','; printString(s, printHashType(i->second.hash.type));
-                s += ','; printString(s, printHash(i->second.hash));
-            }
-            s += ')';
-        }
-
-        s += "],";
-        printStrings(s, inputs.begin(), inputs.end());
-
-        s += ','; printString(s, platform);
-        s += ','; printString(s, builder);
-        s += ','; printStrings(s, args.begin(), args.end());
-
-        s += ",[";
-        first = true;
-        foreach (StringPairs::const_iterator, i, env) {
-            if (first) first = false; else s += ',';
-            s += '('; printString(s, i->first);
-            s += ','; printString(s, i->second);
-            s += ')';
-        }
-
-        s += "])";
-
-        (Hash &) cachedHash = hashString(htSHA256, s);
-    }
+    if (cachedHash.type == htUnknown)
+        (Hash &) cachedHash = hashString(htSHA256, printDerivation(*this));
     return cachedHash;
 }
 

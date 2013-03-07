@@ -113,11 +113,17 @@ class StoreAPI;
 Path writeDerivation(StoreAPI & store,
     const OldDerivation & drv, const string & name, bool repair = false);
 
-/* Parse a derivation. */
+/* Parse an old derivation. */
 OldDerivation parseOldDerivation(const string & s);
 
-/* Print a derivation. */
+/* Print an old derivation. */
 string unparseOldDerivation(const OldDerivation & drv);
+
+/* Unserialize a derivation. */
+Derivation parseDerivation(const string & s);
+
+/* Serialize a derivation. */
+string printDerivation(const Derivation & drv);
 
 /* Check whether a file name ends with the extensions for
    derivations. */
