@@ -54,9 +54,15 @@ void RemoteStore::openConnection(bool reserveSpace)
         /* Connect to a daemon that does the privileged work for
            us. */
         connectToDaemon();
-    else
+    else if (remoteMode == "socket") {
+        int fd;
+        if (!string2Int(getEnv("NIX_REMOTE_SOCKET_FD"), fd))
+            throw Error(format("invalid value for NIX_REMOTE_SOCKET_FD, `%1%'") % getEnv("NIX_REMOTE_SOCKET_FD"));
+        fdSocket = fd;
+    } else
         throw Error(format("invalid setting for NIX_REMOTE, `%1%'") % remoteMode);
 
+    closeOnExec(fdSocket);
     from.fd = fdSocket;
     to.fd = fdSocket;
 
@@ -100,7 +106,6 @@ void RemoteStore::connectToDaemon()
     fdSocket = socket(PF_UNIX, SOCK_STREAM, 0);
     if (fdSocket == -1)
         throw SysError("cannot create Unix domain socket");
-    closeOnExec(fdSocket);
 
     string socketPath = settings.nixDaemonSocketFile;
 
