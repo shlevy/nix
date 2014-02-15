@@ -89,6 +89,7 @@ private:
     FdSource from;
     unsigned int daemonVersion;
     bool initialised;
+    FdSink recursivePathsSink;
 
     void openConnection(bool reserveSpace = true);
 
@@ -97,6 +98,11 @@ private:
     void connectToDaemon();
 
     void setOptions();
+
+    template <class T> void reportRecursivePaths(const T & paths) {
+        if (recursivePathsSink.fd != -1)
+            writeStrings(paths, recursivePathsSink);
+    }
 };
 
 

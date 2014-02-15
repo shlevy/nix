@@ -98,6 +98,10 @@ void RemoteStore::openConnection(bool reserveSpace)
     }
 
     setOptions();
+
+    int recursivePathsFD;
+    if (string2Int(getEnv("NIX_RECURSIVE_PATHS_FD"), recursivePathsFD))
+        recursivePathsSink.fd = recursivePathsFD;
 }
 
 
@@ -212,7 +216,9 @@ PathSet RemoteStore::queryAllValidPaths()
     openConnection();
     writeInt(wopQueryAllValidPaths, to);
     processStderr();
-    return readStorePaths<PathSet>(from);
+    PathSet res = readStorePaths<PathSet>(from);
+    reportRecursivePaths(res);
+    return res;
 }
 
 
@@ -246,6 +252,8 @@ void RemoteStore::querySubstitutablePathInfos(const PathSet & paths,
 
     if (GET_PROTOCOL_MINOR(daemonVersion) < 3) return;
 
+    PathSet newPaths;
+
     if (GET_PROTOCOL_MINOR(daemonVersion) < 12) {
 
         foreach (PathSet::const_iterator, i, paths) {
@@ -256,8 +264,12 @@ void RemoteStore::querySubstitutablePathInfos(const PathSet & paths,
             unsigned int reply = readInt(from);
             if (reply == 0) continue;
             info.deriver = readString(from);
-            if (info.deriver != "") assertStorePath(info.deriver);
+            if (info.deriver != "") {
+                assertStorePath(info.deriver);
+                newPaths.insert(info.deriver);
+            }
             info.references = readStorePaths<PathSet>(from);
+            newPaths.insert(info.references.begin(), info.references.end());
             info.downloadSize = readLongLong(from);
             info.narSize = GET_PROTOCOL_MINOR(daemonVersion) >= 7 ? readLongLong(from) : 0;
             infos[*i] = info;
@@ -273,18 +285,26 @@ void RemoteStore::querySubstitutablePathInfos(const PathSet & paths,
             Path path = readStorePath(from);
             SubstitutablePathInfo & info(infos[path]);
             info.deriver = readString(from);
-            if (info.deriver != "") assertStorePath(info.deriver);
+            if (info.deriver != "") {
+                assertStorePath(info.deriver);
+                newPaths.insert(info.deriver);
+            }
             info.references = readStorePaths<PathSet>(from);
+            newPaths.insert(info.references.begin(), info.references.end());
             info.downloadSize = readLongLong(from);
             info.narSize = readLongLong(from);
         }
 
     }
+
+    if (!newPaths.empty())
+        reportRecursivePaths(newPaths);
 }
 
 
 ValidPathInfo RemoteStore::queryPathInfo(const Path & path)
 {
+    PathSet newPaths;
     openConnection();
     writeInt(wopQueryPathInfo, to);
     writeString(path, to);
@@ -292,11 +312,17 @@ ValidPathInfo RemoteStore::queryPathInfo(const Path & path)
     ValidPathInfo info;
     info.path = path;
     info.deriver = readString(from);
-    if (info.deriver != "") assertStorePath(info.deriver);
+    if (info.deriver != "") {
+        assertStorePath(info.deriver);
+        newPaths.insert(info.deriver);
+    }
     info.hash = parseHash(htSHA256, readString(from));
     info.references = readStorePaths<PathSet>(from);
+    newPaths.insert(info.references.begin(), info.references.end());
     info.registrationTime = readInt(from);
     info.narSize = readLongLong(from);
+    if (!newPaths.empty())
+        reportRecursivePaths(newPaths);
     return info;
 }
 
@@ -320,6 +346,8 @@ void RemoteStore::queryReferences(const Path & path,
     writeString(path, to);
     processStderr();
     PathSet references2 = readStorePaths<PathSet>(from);
+    // Don't need to reportRecursivePaths here because if path
+    // is in the closure, so are its references
     references.insert(references2.begin(), references2.end());
 }
 
@@ -332,6 +360,7 @@ void RemoteStore::queryReferrers(const Path & path,
     writeString(path, to);
     processStderr();
     PathSet referrers2 = readStorePaths<PathSet>(from);
+    reportRecursivePaths(referrers2);
     referrers.insert(referrers2.begin(), referrers2.end());
 }
 
@@ -343,7 +372,10 @@ Path RemoteStore::queryDeriver(const Path & path)
     writeString(path, to);
     processStderr();
     Path drvPath = readString(from);
-    if (drvPath != "") assertStorePath(drvPath);
+    if (drvPath != "") {
+        assertStorePath(drvPath);
+        reportRecursivePaths(singleton<PathSet>(drvPath));
+    }
     return drvPath;
 }
 
@@ -354,7 +386,9 @@ PathSet RemoteStore::queryValidDerivers(const Path & path)
     writeInt(wopQueryValidDerivers, to);
     writeString(path, to);
     processStderr();
-    return readStorePaths<PathSet>(from);
+    PathSet res = readStorePaths<PathSet>(from);
+    reportRecursivePaths(res);
+    return res;
 }
 
 
@@ -407,7 +441,9 @@ Path RemoteStore::addToStore(const Path & _srcPath,
     writeString(printHashType(hashAlgo), to);
     dumpPath(srcPath, to, filter);
     processStderr();
-    return readStorePath(from);
+    Path res = readStorePath(from);
+    reportRecursivePaths(singleton<PathSet>(res));
+    return res;
 }
 
 
@@ -423,7 +459,9 @@ Path RemoteStore::addTextToStore(const string & name, const string & s,
     writeStrings(references, to);
 
     processStderr();
-    return readStorePath(from);
+    Path res = readStorePath(from);
+    reportRecursivePaths(singleton<PathSet>(res));
+    return res;
 }
 
 
@@ -446,7 +484,9 @@ Paths RemoteStore::importPaths(bool requireSignature, Source & source)
     /* We ignore requireSignature, since the worker forces it to true
        anyway. */
     processStderr(0, &source);
-    return readStorePaths<Paths>(from);
+    Paths res = readStorePaths<Paths>(from);
+    reportRecursivePaths(res);
+    return res;
 }
 
 
@@ -516,11 +556,15 @@ Roots RemoteStore::findRoots()
     processStderr();
     unsigned int count = readInt(from);
     Roots result;
+    PathSet newPaths;
     while (count--) {
         Path link = readString(from);
         Path target = readStorePath(from);
+        newPaths.insert(target);
         result[link] = target;
     }
+    if (!newPaths.empty())
+        reportRecursivePaths(newPaths);
     return result;
 }
 
