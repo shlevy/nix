@@ -274,5 +274,8 @@ bool wantOutput(const string & output, const std::set<string> & wanted)
     return wanted.empty() || wanted.find(output) != wanted.end();
 }
 
+string recursiveDerivationRewriteHash(const Path & drvPath, const string & output) {
+    return printHash32(compressHash(hashString(htSHA256, "recursiveInput:" + drvPath + "!" + output), 20));
+}
 
 }

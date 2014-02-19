@@ -89,5 +89,8 @@ Path makeDrvPathWithOutputs(const Path & drvPath, const std::set<string> & outpu
 
 bool wantOutput(const string & output, const std::set<string> & wanted);
 
+/* Make a fake hash part for a recursive derivation input */
+string recursiveDerivationRewriteHash(const Path & drvPath, const string & output);
+
 
 }

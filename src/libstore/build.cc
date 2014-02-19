@@ -100,7 +100,7 @@ typedef map<Path, WeakGoalPtr> WeakGoalMap;
 class Goal : public boost::enable_shared_from_this<Goal>
 {
 public:
-    typedef enum {ecBusy, ecSuccess, ecFailed, ecNoSubstituters, ecIncompleteClosure} ExitCode;
+    typedef enum {ecBusy, ecSuccess, ecFailed, ecNoSubstituters, ecIncompleteClosure, ecReplaced} ExitCode;
 
 protected:
 
@@ -109,6 +109,9 @@ protected:
 
     /* Goals that this goal is waiting for. */
     Goals waitees;
+
+    /* waitees that need to be replaced by other goals */
+    Goals waiteesToReplace;
 
     /* Goals waiting for this one to finish.  Must use weak pointers
        here to prevent cycles. */
@@ -322,6 +325,9 @@ void Goal::waiteeDone(GoalPtr waitee, ExitCode result)
 
     if (result == ecIncompleteClosure) ++nrIncompleteClosure;
 
+    /* Keep this alive so we can find it in the goal map */
+    if (result == ecReplaced) waiteesToReplace.insert(waitee);
+
     if (waitees.empty() || (result == ecFailed && !settings.keepGoing)) {
 
         /* If we failed and keepGoing is not set, we remove all
@@ -344,7 +350,7 @@ void Goal::amDone(ExitCode result)
 {
     trace("done");
     assert(exitCode == ecBusy);
-    assert(result == ecSuccess || result == ecFailed || result == ecNoSubstituters || result == ecIncompleteClosure);
+    assert(result == ecSuccess || result == ecFailed || result == ecNoSubstituters || result == ecIncompleteClosure || result == ecReplaced);
     exitCode = result;
     foreach (WeakGoals::iterator, i, waiters) {
         GoalPtr goal = i->lock();
@@ -801,6 +807,9 @@ public:
     /* Add wanted outputs to an already existing derivation goal. */
     void addWantedOutputs(const StringSet & outputs);
 
+    /* The goal we've been replaced with (if any) */
+    GoalPtr replacement;
+
 private:
     /* The states. */
     void init();
@@ -1049,8 +1058,12 @@ void DerivationGoal::outputsSubstituted()
     wantedOutputs = PathSet();
 
     /* The inputs must be built before we can build this goal. */
-    foreach (DerivationInputs::iterator, i, drv.inputDrvs)
-        addWaitee(worker.makeDerivationGoal(i->first, i->second, buildMode == bmRepair ? bmRepair : bmNormal));
+    foreach (DerivationInputs::iterator, i, drv.inputDrvs) {
+        StringSet outputs;
+        foreach (StringSet::iterator, j, i->second)
+            outputs.insert(((*j)[0] == '!') ? "out" : *j);
+        addWaitee(worker.makeDerivationGoal(i->first, outputs, buildMode == bmRepair ? bmRepair : bmNormal));
+    }
 
     foreach (PathSet::iterator, i, drv.inputSrcs)
         addWaitee(worker.makeSubstitutionGoal(*i));
@@ -1100,6 +1113,7 @@ void DerivationGoal::repairClosure()
         if (drvPath2 == "")
             addWaitee(worker.makeSubstitutionGoal(*i, true));
         else
+            /* This is after replacement happens, so none of these can need replacements */
             addWaitee(worker.makeDerivationGoal(drvPath2, PathSet(), bmRepair));
     }
 
@@ -1130,6 +1144,134 @@ void DerivationGoal::inputsRealised()
             format("cannot build derivation `%1%': %2% dependencies couldn't be built")
             % drvPath % nrFailed);
         amDone(ecFailed);
+        return;
+    }
+
+    HashRewrites drvRewrites;
+    Derivation replacedDrv(drv);
+
+    /* Handle any inputs that have replacements */
+    foreach (Goals::iterator, i, waiteesToReplace) {
+        /* only derivation goals ever call amDone(ecReplaced) */
+        DerivationGoal *goal = static_cast<DerivationGoal *>(i->get());
+        DerivationGoal *replace = static_cast<DerivationGoal *>(goal->replacement.get());
+        assert(replacedDrv.inputDrvs.find(goal->drvPath) != replacedDrv.inputDrvs.end());
+        replacedDrv.inputDrvs[replace->drvPath] = replacedDrv.inputDrvs[goal->drvPath];
+        replacedDrv.inputDrvs.erase(goal->drvPath);
+
+        /* We write the derivation before setting replacement */
+        assert(worker.store.isValidPath(replace->drvPath));
+        assert(worker.store.isValidPath(goal->drvPath));
+        Derivation oldDrv = derivationFromPath(worker.store, goal->drvPath);
+        Derivation newDrv = derivationFromPath(worker.store, replace->drvPath);
+        assert(!oldDrv.outputs.empty());
+        foreach (DerivationOutputs::iterator, j, oldDrv.outputs) {
+            assert(newDrv.outputs.find(j->first) != newDrv.outputs.end());
+            drvRewrites[storePathToHashPart(j->second.path)] =
+                storePathToHashPart(newDrv.outputs[j->first].path);
+        }
+    }
+    waiteesToReplace.clear();
+
+    foreach (DerivationInputs::iterator, i, drv.inputDrvs) {
+        if (replacedDrv.inputDrvs.find(i->first) == replacedDrv.inputDrvs.end())
+            /* This means it was a replaced drv, so it may not be valid yet */
+            continue;
+        Derivation linkedDrv;
+        Path linkedDrvPath;
+        foreach (StringSet::iterator, j, i->second)
+            if ((*j)[0] == '!') {
+                if (linkedDrvPath == "") {
+                    Derivation rdrv = derivationFromPath(worker.store, i->first);
+
+                    DerivationOutputs::iterator drvLink = rdrv.outputs.find("out");
+                    if (drvLink == rdrv.outputs.end()) {
+                        printMsg(lvlError,
+                            format("cannot build derivation `%1%': recursive derivation `%2%''s does not have an output named `out'")
+                            % drvPath % i->first);
+                        amDone(ecFailed);
+                        return;
+                    }
+
+                    if (!isLink(drvLink->second.path)) {
+                        printMsg(lvlError,
+                            format("cannot build derivation `%1%': recursive derivation `%2%''s output is not a symlink to a derivation")
+                            % drvPath % i->first);
+                        amDone(ecFailed);
+                        return;
+                    }
+
+                    linkedDrvPath = readLink(drvLink->second.path);
+                    if (!isDerivation(linkedDrvPath)) {
+                        printMsg(lvlError,
+                            format("cannot build derivation `%1%': recursive derivation `%2%''s output is not a symlink to a derivation")
+                            % drvPath % i->first);
+                        amDone(ecFailed);
+                        return;
+                    }
+
+                    if (storePathToName(linkedDrvPath) != storePathToName(i->first)) {
+                        printMsg(lvlError,
+                            format("cannot build derivation `%1%': recursive derivation `%2%''s linked derivation has a different name `%3%'")
+                            % drvPath % i->first % storePathToName(linkedDrvPath));
+                        amDone(ecFailed);
+                        return;
+                    }
+
+                    linkedDrv = derivationFromPath(worker.store, linkedDrvPath);
+                }
+                string output = j->substr(1);
+                DerivationOutputs::iterator k = linkedDrv.outputs.find(output);
+                if (k == linkedDrv.outputs.end()) {
+                    printMsg(lvlError,
+                        format("cannot build derivation `%1%': recursive derivation `%2%''s linked derivation doesn't have requested output `%3%'")
+                        % drvPath % i->first % output);
+                    amDone(ecFailed);
+                    return;
+                }
+
+                replacedDrv.inputDrvs[i->first].erase(*j);
+                replacedDrv.inputDrvs[i->first].insert(output);
+                /* Rewrite the fake output to the real one */
+                drvRewrites[recursiveDerivationRewriteHash(i->first, output)] =
+                    storePathToHashPart(k->second.path);
+            }
+        if (linkedDrvPath != "") {
+            replacedDrv.inputDrvs[linkedDrvPath] = replacedDrv.inputDrvs[i->first];
+            replacedDrv.inputDrvs.erase(i->first);
+        }
+    }
+
+    if (!drvRewrites.empty()) {
+        replacedDrv = parseDerivation(rewriteHashes(unparseDerivation(replacedDrv), drvRewrites));
+        if (!isFixedOutputDrv(replacedDrv)) {
+            /* Recompute output paths */
+            string drvName = storePathToName(drvPath);
+            assert(isDerivation(drvName));
+            drvName = string(drvName, 0, drvName.size() - drvExtension.size());
+
+            foreach (DerivationOutputs::iterator, i, replacedDrv.outputs) {
+                i->second.path = "";
+                replacedDrv.env[i->first] = "";
+            }
+
+            Hash h = hashDerivationModulo(worker.store, replacedDrv);
+
+            foreach (DerivationOutputs::iterator, i, replacedDrv.outputs) {
+                Path outPath = makeOutputPath(i->first, h, drvName);
+                replacedDrv.env[i->first] = outPath;
+                i->second.path = outPath;
+            }
+        }
+
+        Path replacedDrvPath =
+            writeDerivation(worker.store, replacedDrv, storePathToName(drvPath), buildMode == bmRepair);
+        replacement = worker.makeDerivationGoal(
+                    replacedDrvPath,
+                    wantedOutputs,
+                    buildMode == bmRepair ? bmRepair : bmNormal
+                    );
+        amDone(ecReplaced);
         return;
     }
 
@@ -3428,15 +3570,30 @@ void LocalStore::buildPaths(const PathSet & drvPaths, BuildMode buildMode)
             goals.insert(worker.makeSubstitutionGoal(*i, buildMode));
     }
 
-    worker.run(goals);
-
     PathSet failed;
-    foreach (Goals::iterator, i, goals)
-        if ((*i)->getExitCode() == Goal::ecFailed) {
-            DerivationGoal * i2 = dynamic_cast<DerivationGoal *>(i->get());
-            if (i2) failed.insert(i2->getDrvPath());
-            else failed.insert(dynamic_cast<SubstitutionGoal *>(i->get())->getStorePath());
+    while (!goals.empty()) {
+        worker.run(goals);
+        foreach (Goals::iterator, i, goals) {
+            DerivationGoal *i2;
+            goals.erase(i);
+            switch ((*i)->getExitCode()) {
+                case Goal::ecFailed:
+                    i2 = dynamic_cast<DerivationGoal *>(i->get());
+                    if (i2) failed.insert(i2->getDrvPath());
+                    else failed.insert(dynamic_cast<SubstitutionGoal *>(i->get())->getStorePath());
+                    break;
+                case Goal::ecReplaced:
+                    i2 = static_cast<DerivationGoal *>(i->get());
+                    goals.insert(i2->replacement);
+                    printMsg(lvlInfo, format("derivation `%1%' replaced with `%2%'")
+                        % i2->getDrvPath() % static_cast<DerivationGoal *>(i2->replacement.get())->getDrvPath());
+                    break;
+                default:
+                    break;
+            }
         }
+    }
+
 
     if (!failed.empty())
         throw Error(format("build of %1% failed") % showPaths(failed), worker.exitStatus());

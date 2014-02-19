@@ -75,6 +75,13 @@ string storePathToName(const Path & path)
 }
 
 
+string storePathToHashPart(const Path & path)
+{
+    assertStorePath(path);
+    return string(path, settings.nixStore.size() + 1, 32);
+}
+
+
 void checkStoreName(const string & name)
 {
     string validChars = "+-._?=";

@@ -264,6 +264,9 @@ bool isStorePath(const Path & path);
 
 /* Extract the name part of the given store path. */
 string storePathToName(const Path & path);
+
+/* Extract the hash part of the given store path. */
+string storePathToHashPart(const Path & path);
     
 void checkStoreName(const string & name);
 
