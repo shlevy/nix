@@ -526,7 +526,7 @@ Paths RemoteStore::importPaths(bool requireSignature, Source & source)
 }
 
 
-void RemoteStore::buildPaths(const PathSet & drvPaths, BuildMode buildMode)
+void RemoteStore::buildPaths(const PathSet & drvPaths, ReplacementMap & replacements, BuildMode buildMode)
 {
     if (buildMode != bmNormal) throw Error("repairing or checking is not supported when building through the Nix daemon");
     openConnection();
@@ -542,22 +542,38 @@ void RemoteStore::buildPaths(const PathSet & drvPaths, BuildMode buildMode)
         writeStrings(drvPaths2, to);
     }
     processStderr();
-    readInt(from);
+    if (GET_PROTOCOL_MINOR(daemonVersion) >= 15) {
+        while (true) {
+            Path oldDrvPath = readString(from);
+            if (oldDrvPath.empty())
+                break;
+            assertStorePath(oldDrvPath);
+            Path newDrvPath = readStorePath(from);
+            replacements[oldDrvPath] = newDrvPath;
+        }
+    } else
+        readInt(from);
 
     if (fdRecursivePaths != -1) {
         PathSet recursivePaths;
         foreach (PathSet::const_iterator, i, drvPaths) {
             DrvPathWithOutputs i2 = parseDrvPathWithOutputs(*i);
             if (isDerivation(i2.first)) {
+                Path drvPath = i2.first;
+                ReplacementMap::iterator j = replacements.find(drvPath);
+                while (j != replacements.end()) {
+                    drvPath = j->second;
+                    j = replacements.find(drvPath);
+                }
                 Derivation drv;
                 try {
-                    drv = parseDerivation(readFile(i2.first));
-                    recursivePaths.insert(i2.first);
+                    drv = parseDerivation(readFile(drvPath));
+                    recursivePaths.insert(drvPath);
                 } catch (SysError & e) {
                     if (e.errNo == ENOENT) {
                         /* Need to ask for the drv to be added to chroot */
-                        _reportRecursivePath(i2.first);
-                        drv = parseDerivation(readFile(i2.first));
+                        _reportRecursivePath(drvPath);
+                        drv = parseDerivation(readFile(drvPath));
                     } else
                         throw;
                 }

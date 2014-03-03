@@ -85,6 +85,8 @@ typedef list<DrvInfo> DrvInfos;
 bool getDerivation(EvalState & state, Value & v, DrvInfo & drv,
     bool ignoreAssertionFailures);
 
+void getDerivation(EvalState & state, const Path & drvPath, const string & outputName, DrvInfo & drv);
+
 void getDerivations(EvalState & state, Value & v, const string & pathPrefix,
     Bindings & autoArgs, DrvInfos & drvs,
     bool ignoreAssertionFailures);

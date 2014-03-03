@@ -38,7 +38,8 @@ bool createUserEnv(EvalState & state, DrvInfos & elems,
             drvsToBuild.insert(i->queryDrvPath());
 
     debug(format("building user environment dependencies"));
-    store->buildPaths(drvsToBuild, state.repair ? bmRepair : bmNormal);
+    ReplacementMap replacements;
+    store->buildPaths(drvsToBuild, replacements, state.repair ? bmRepair : bmNormal);
 
     /* Construct the whole top level derivation. */
     PathSet references;
@@ -46,6 +47,16 @@ bool createUserEnv(EvalState & state, DrvInfos & elems,
     state.mkList(manifest, elems.size());
     unsigned int n = 0;
     foreach (DrvInfos::iterator, i, elems) {
+        /* Handle replacements */
+        Path newDrvPath = i->queryDrvPath();
+        ReplacementMap::iterator j = replacements.find(newDrvPath);
+        while (j != replacements.end()) {
+            newDrvPath = j->second;
+            j = replacements.find(newDrvPath);
+        }
+        if (newDrvPath != i->queryDrvPath())
+            getDerivation(state, newDrvPath, i->queryOutputName(), *i);
+
         /* Create a pseudo-derivation containing the name, system,
            output paths, and optionally the derivation path, as well
            as the meta attributes. */
@@ -125,7 +136,8 @@ bool createUserEnv(EvalState & state, DrvInfos & elems,
 
     /* Realise the resulting store expression. */
     debug("building user environment");
-    store->buildPaths(singleton<PathSet>(topLevelDrv), state.repair ? bmRepair : bmNormal);
+    store->buildPaths(singleton<PathSet>(topLevelDrv), replacements, state.repair ? bmRepair : bmNormal);
+    /* This won't ever be replaced, so we're fine */
 
     /* Switch the current user environment to the output path. */
     PathLocks lock;

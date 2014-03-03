@@ -217,4 +217,18 @@ Paths topoSortPaths(StoreAPI & store, const PathSet & paths)
 }
 
 
+string rewriteHashes(string s, const HashRewrites & rewrites)
+{
+    foreach (HashRewrites::const_iterator, i, rewrites) {
+        assert(i->first.size() == i->second.size());
+        size_t j = 0;
+        while ((j = s.find(i->first, j)) != string::npos) {
+            debug(format("rewriting @ %1%") % j);
+            s.replace(j, i->second.size(), i->second);
+        }
+    }
+    return s;
+}
+
+
 }

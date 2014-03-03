@@ -44,27 +44,44 @@ static void prim_import(EvalState & state, Value * * args, Value & v)
     PathSet context;
     Path path = state.coerceToPath(*args[0], context);
 
+    HashRewrites rewrites;
     foreach (PathSet::iterator, i, context) {
-        Path ctx = decodeContext(*i).first;
-        assert(isStorePath(ctx));
-        if (!store->isValidPath(ctx))
+        std::pair<string, string> ctx(decodeContext(*i));
+        Path ctxPath = ctx.first;
+        Path ctxOut = ctx.second;
+        assert(isStorePath(ctxPath));
+        if (!store->isValidPath(ctxPath))
             throw EvalError(format("cannot import `%1%', since path `%2%' is not valid")
-                % path % ctx);
-        if (isDerivation(ctx))
+                % path % ctxPath);
+        if (isDerivation(ctxPath) && !ctxOut.empty())
             try {
+                Path ctx = (format("%1%!%2%") % ctxPath % ctxOut).str();
                 /* For performance, prefetch all substitute info. */
                 PathSet willBuild, willSubstitute, unknown;
                 unsigned long long downloadSize, narSize;
                 queryMissing(*store, singleton<PathSet>(ctx),
                     willBuild, willSubstitute, unknown, downloadSize, narSize);
 
-                /* !!! If using a substitute, we only need to fetch
-                   the selected output of this derivation. */
-                store->buildPaths(singleton<PathSet>(ctx));
+                ReplacementMap replacements;
+                store->buildPaths(singleton<PathSet>(ctx), replacements);
+                Path newDrvPath = ctxPath;
+                ReplacementMap::iterator j = replacements.find(newDrvPath);
+                while (j != replacements.end()) {
+                    newDrvPath = j->second;
+                    j = replacements.find(newDrvPath);
+                }
+                if (ctxPath != newDrvPath) {
+                    Derivation oldDrv = derivationFromPath(*store, ctxPath);
+                    Derivation newDrv = derivationFromPath(*store, newDrvPath);
+                    rewrites[storePathToHashPart(oldDrv.outputs[ctxOut].path)] =
+                        storePathToHashPart(newDrv.outputs[ctxOut].path);
+                }
             } catch (Error & e) {
                 throw ImportError(e.msg());
             }
     }
+
+    path = rewriteHashes(path, rewrites);
 
     if (isStorePath(path) && store->isValidPath(path) && isDerivation(path)) {
         Derivation drv = parseDerivation(readFile(path));

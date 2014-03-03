@@ -710,11 +710,20 @@ static void opSet(Globals & globals,
 
     DrvInfo & drv(elems.front());
 
-    if (drv.queryDrvPath() != "") {
+    Path drvPath = drv.queryDrvPath();
+    if (drvPath != "") {
         PathSet paths = singleton<PathSet>(drv.queryDrvPath());
         printMissing(*store, paths);
         if (globals.dryRun) return;
-        store->buildPaths(paths, globals.state.repair ? bmRepair : bmNormal);
+        ReplacementMap replacements;
+        store->buildPaths(paths, replacements, globals.state.repair ? bmRepair : bmNormal);
+        ReplacementMap::iterator i = replacements.find(drvPath);
+        while (i != replacements.end()) {
+            drvPath = i->second;
+            i = replacements.find(drvPath);
+        }
+        if (drvPath != drv.queryDrvPath())
+            getDerivation(globals.state, drvPath, drv.queryOutputName(), drv);
     }
     else {
         printMissing(*store, singleton<PathSet>(drv.queryOutPath()));

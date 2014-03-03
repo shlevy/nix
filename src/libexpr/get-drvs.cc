@@ -228,6 +228,17 @@ bool getDerivation(EvalState & state, Value & v, DrvInfo & drv,
 }
 
 
+void getDerivation(EvalState & state, const Path & drvPath, const string & outputName, DrvInfo & drv) {
+    ExprBuiltin import(state.symbols.create("import"));
+    ExprPath path(drvPath);
+    ExprApp app(&import, &path);
+    ExprSelect select(&app, state.symbols.create(outputName));
+    Value v;
+    state.eval(&select, v);
+    getDerivation(state, v, drv, false);
+}
+
+
 static string addToPath(const string & s1, const string & s2)
 {
     return s1.empty() ? s2 : s1 + "." + s2;

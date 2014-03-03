@@ -150,7 +150,7 @@ public:
 
     Paths importPaths(bool requireSignature, Source & source);
 
-    void buildPaths(const PathSet & paths, BuildMode buildMode);
+    void buildPaths(const PathSet & paths, ReplacementMap & replacements, BuildMode buildMode);
 
     void ensurePath(const Path & path);
 

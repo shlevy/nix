@@ -100,6 +100,7 @@ typedef list<ValidPathInfo> ValidPathInfos;
 
 enum BuildMode { bmNormal, bmRepair, bmCheck };
 
+typedef std::map<Path, Path> ReplacementMap;
 
 class StoreAPI 
 {
@@ -193,7 +194,8 @@ public:
        output paths can be created by running the builder, after
        recursively building any sub-derivations. For inputs that are
        not derivations, substitute them. */
-    virtual void buildPaths(const PathSet & paths, BuildMode buildMode = bmNormal) = 0;
+    virtual void buildPaths(const PathSet & paths, ReplacementMap & replacements,
+        BuildMode buildMode = bmNormal) = 0;
 
     /* Ensure that a path is valid.  If it is not currently valid, it
        may be made valid by running a substitute (if defined for the

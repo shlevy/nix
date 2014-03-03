@@ -34,5 +34,8 @@ void queryMissing(StoreAPI & store, const PathSet & targets,
 
 bool willBuildLocally(const Derivation & drv);
 
+typedef std::map<string, string> HashRewrites;
+
+string rewriteHashes(string s, const HashRewrites & rewrites);
 
 }

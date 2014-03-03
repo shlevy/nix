@@ -66,8 +66,17 @@ static PathSet realisePath(Path path, bool build = true)
     DrvPathWithOutputs p = parseDrvPathWithOutputs(path);
 
     if (isDerivation(p.first)) {
-        if (build) store->buildPaths(singleton<PathSet>(path));
-        Derivation drv = derivationFromPath(*store, p.first);
+        Path drvPath = p.first;
+        if (build) {
+            ReplacementMap replacements;
+            store->buildPaths(singleton<PathSet>(path), replacements);
+            ReplacementMap::iterator i = replacements.find(drvPath);
+            while (i != replacements.end()) {
+                drvPath = i->second;
+                i = replacements.find(drvPath);
+            }
+        }
+        Derivation drv = derivationFromPath(*store, drvPath);
         rootNr++;
 
         if (p.second.empty())
@@ -77,7 +86,7 @@ static PathSet realisePath(Path path, bool build = true)
         foreach (StringSet::iterator, j, p.second) {
             DerivationOutputs::iterator i = drv.outputs.find(*j);
             if (i == drv.outputs.end())
-                throw Error(format("derivation `%1%' does not have an output named `%2%'") % p.first % *j);
+                throw Error(format("derivation `%1%' does not have an output named `%2%'") % drvPath % *j);
             Path outPath = i->second.path;
             if (gcRoot == "")
                 printGCWarning();
@@ -146,7 +155,9 @@ static void opRealise(Strings opFlags, Strings opArgs)
     if (dryRun) return;
 
     /* Build all paths at the same time to exploit parallelism. */
-    store->buildPaths(PathSet(paths.begin(), paths.end()), buildMode);
+    ReplacementMap replacements;
+    store->buildPaths(PathSet(paths.begin(), paths.end()), replacements, buildMode);
+    /* replacements are handled in realisePath */
 
     if (!ignoreUnknown)
         foreach (Paths::iterator, i, paths) {

@@ -453,10 +453,18 @@ static void performOp(bool trusted, unsigned int clientVersion,
 
     case wopBuildPaths: {
         PathSet drvs = readStorePaths<PathSet>(from);
+        ReplacementMap replacements;
         startWork();
-        store->buildPaths(drvs);
+        store->buildPaths(drvs, replacements);
         stopWork();
-        writeInt(1, to);
+        if (GET_PROTOCOL_MINOR(clientVersion) >= 15) {
+            foreach (ReplacementMap::iterator, i, replacements) {
+                writeString(i->first, to);
+                writeString(i->second, to);
+            }
+            writeString("", to);
+        } else
+            writeInt(1, to);
         break;
     }
 

@@ -657,26 +657,6 @@ HookInstance::~HookInstance()
 //////////////////////////////////////////////////////////////////////
 
 
-typedef map<string, string> HashRewrites;
-
-
-string rewriteHashes(string s, const HashRewrites & rewrites)
-{
-    foreach (HashRewrites::const_iterator, i, rewrites) {
-        assert(i->first.size() == i->second.size());
-        size_t j = 0;
-        while ((j = s.find(i->first, j)) != string::npos) {
-            debug(format("rewriting @ %1%") % j);
-            s.replace(j, i->second.size(), i->second);
-        }
-    }
-    return s;
-}
-
-
-//////////////////////////////////////////////////////////////////////
-
-
 typedef enum {rpAccept, rpDecline, rpPostpone} HookReply;
 
 class SubstitutionGoal;
@@ -3554,7 +3534,7 @@ unsigned int Worker::exitStatus()
 //////////////////////////////////////////////////////////////////////
 
 
-void LocalStore::buildPaths(const PathSet & drvPaths, BuildMode buildMode)
+void LocalStore::buildPaths(const PathSet & drvPaths, ReplacementMap & replacements, BuildMode buildMode)
 {
     startNest(nest, lvlDebug,
         format("building %1%") % showPaths(drvPaths));
@@ -3580,14 +3560,18 @@ void LocalStore::buildPaths(const PathSet & drvPaths, BuildMode buildMode)
                 case Goal::ecFailed:
                     i2 = dynamic_cast<DerivationGoal *>(i->get());
                     if (i2) failed.insert(i2->getDrvPath());
-                    else failed.insert(dynamic_cast<SubstitutionGoal *>(i->get())->getStorePath());
+                    else failed.insert(static_cast<SubstitutionGoal *>(i->get())->getStorePath());
                     break;
-                case Goal::ecReplaced:
+                case Goal::ecReplaced: {
                     i2 = static_cast<DerivationGoal *>(i->get());
                     goals.insert(i2->replacement);
+                    Path oldDrvPath = i2->getDrvPath();
+                    Path newDrvPath = static_cast<DerivationGoal *>(i2->replacement.get())->getDrvPath();
+                    replacements[oldDrvPath] = newDrvPath;
                     printMsg(lvlInfo, format("derivation `%1%' replaced with `%2%'")
-                        % i2->getDrvPath() % static_cast<DerivationGoal *>(i2->replacement.get())->getDrvPath());
+                        % oldDrvPath % newDrvPath);
                     break;
+                }
                 default:
                     break;
             }
