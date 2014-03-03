@@ -61,20 +61,14 @@ static Path useDeriver(Path path)
 
 /* Realise the given path.  For a derivation that means build it; for
    other paths it means ensure their validity. */
-static PathSet realisePath(Path path, bool build = true)
+static PathSet realisePath(DrvPathWithOutputs p, const ReplacementMap & replacements)
 {
-    DrvPathWithOutputs p = parseDrvPathWithOutputs(path);
-
     if (isDerivation(p.first)) {
         Path drvPath = p.first;
-        if (build) {
-            ReplacementMap replacements;
-            store->buildPaths(singleton<PathSet>(path), replacements);
-            ReplacementMap::iterator i = replacements.find(drvPath);
-            while (i != replacements.end()) {
-                drvPath = i->second;
-                i = replacements.find(drvPath);
-            }
+        ReplacementMap::const_iterator i = replacements.find(drvPath);
+        while (i != replacements.end()) {
+            drvPath = i->second;
+            i = replacements.find(drvPath);
         }
         Derivation drv = derivationFromPath(*store, drvPath);
         rootNr++;
@@ -102,18 +96,29 @@ static PathSet realisePath(Path path, bool build = true)
     }
 
     else {
-        if (build) store->ensurePath(path);
-        else if (!store->isValidPath(path)) throw Error(format("path `%1%' does not exist and cannot be created") % path);
         if (gcRoot == "")
             printGCWarning();
         else {
             Path rootName = gcRoot;
             rootNr++;
             if (rootNr > 1) rootName += "-" + int2String(rootNr);
-            path = addPermRoot(*store, path, rootName, indirectRoot);
+            p.first = addPermRoot(*store, p.first, rootName, indirectRoot);
         }
-        return singleton<PathSet>(path);
+        return singleton<PathSet>(p.first);
     }
+}
+
+
+static PathSet realisePath(const Path & path)
+{
+    DrvPathWithOutputs p = parseDrvPathWithOutputs(path);
+
+    ReplacementMap replacements;
+    if (isDerivation(p.first))
+        store->buildPaths(singleton<PathSet>(path), replacements);
+    else
+        store->ensurePath(path);
+    return realisePath(p, replacements);
 }
 
 
@@ -161,7 +166,10 @@ static void opRealise(Strings opFlags, Strings opArgs)
 
     if (!ignoreUnknown)
         foreach (Paths::iterator, i, paths) {
-            PathSet paths = realisePath(*i, false);
+            DrvPathWithOutputs p = parseDrvPathWithOutputs(*i);
+            if (!isDerivation(p.first) && !store->isValidPath(*i))
+                throw Error(format("path `%1%' does not exist and cannot be created") % *i);
+            PathSet paths = realisePath(p, replacements);
             if (!noOutput)
                 foreach (PathSet::iterator, j, paths)
                     cout << format("%1%\n") % *j;
