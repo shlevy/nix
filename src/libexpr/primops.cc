@@ -73,6 +73,8 @@ static void prim_import(EvalState & state, Value * * args, Value & v)
                 if (ctxPath != newDrvPath) {
                     Derivation oldDrv = derivationFromPath(*store, ctxPath);
                     Derivation newDrv = derivationFromPath(*store, newDrvPath);
+                    if (ctxOut[0] == '?')
+                        ctxOut = ctxOut.substr(1);
                     rewrites[storePathToHashPart(oldDrv.outputs[ctxOut].path)] =
                         storePathToHashPart(newDrv.outputs[ctxOut].path);
                 }
@@ -383,6 +385,8 @@ static void prim_derivationStrict(EvalState & state, Value * * args, Value & v)
     StringSet outputs;
     outputs.insert("out");
 
+    bool isRecursive = false;
+
     foreach (Bindings::iterator, i, *args[0]->attrs) {
         if (i->name == state.sIgnoreNulls) continue;
         string key = i->name;
@@ -441,6 +445,7 @@ static void prim_derivationStrict(EvalState & state, Value * * args, Value & v)
                     if (outputs.empty())
                         throw EvalError("derivation cannot have an empty set of outputs");
                 }
+                else if (key == "__recursive") isRecursive = state.forceBool(*i->value);
             }
 
         } catch (Error & e) {
@@ -507,7 +512,7 @@ static void prim_derivationStrict(EvalState & state, Value * * args, Value & v)
 
     if (outputHash != "") {
         /* Handle fixed-output derivations. */
-        if (outputs.size() != 1 || *(outputs.begin()) != "out")
+        if (!isRecursive && (outputs.size() != 1 || *(outputs.begin()) != "out"))
             throw Error("multiple outputs are not supported in fixed-output derivations");
 
         HashType ht = parseHashType(outputHashAlgo);
@@ -528,7 +533,8 @@ static void prim_derivationStrict(EvalState & state, Value * * args, Value & v)
            are empty, and the corresponding environment variables have
            an empty value.  This ensures that changes in the set of
            output names do get reflected in the hash. */
-        foreach (StringSet::iterator, i, outputs) {
+        StringSet realOutputs = isRecursive ? singleton<StringSet>("out") : outputs;
+        foreach (StringSet::iterator, i, realOutputs) {
             drv.env[*i] = "";
             drv.outputs[*i] = DerivationOutput("", "", "");
         }
@@ -556,11 +562,17 @@ static void prim_derivationStrict(EvalState & state, Value * * args, Value & v)
        read them later. */
     drvHashes[drvPath] = hashDerivationModulo(*store, drv);
 
-    state.mkAttrs(v, 1 + drv.outputs.size());
+    state.mkAttrs(v, 1 + outputs.size());
     mkString(*state.allocAttr(v, state.sDrvPath), drvPath, singleton<PathSet>("=" + drvPath));
-    foreach (DerivationOutputs::iterator, i, drv.outputs) {
-        mkString(*state.allocAttr(v, state.symbols.create(i->first)),
-            i->second.path, singleton<PathSet>("!" + i->first + "!" + drvPath));
+    foreach (StringSet::iterator, i, outputs) {
+        Path outPath = isRecursive ? ((format("%1%/%2%-%3%%4%") %
+            settings.nixStore %
+            recursiveDerivationRewriteHash(drvPath, *i) %
+            drvName %
+            (*i == "out" ? "" : "-" + *i)).str()) : drv.outputs[*i].path;
+        Path ctx = (format("!%1%%2%!%3%") % (isRecursive ? "?" : "") % *i % drvPath).str();
+        mkString(*state.allocAttr(v, state.symbols.create(*i)),
+            outPath, singleton<PathSet>(ctx));
     }
     v.attrs->sort();
 }
