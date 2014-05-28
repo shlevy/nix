@@ -1,5 +1,7 @@
 { nix ? { outPath = ./.; revCount = 1234; shortRev = "abcdef"; }
 , officialRelease ? false
+, pdfManual ? true
+, runTests ? true
 }:
 
 let
@@ -24,8 +26,8 @@ let
 
         buildInputs =
           [ curl bison flex perl libxml2 libxslt w3m bzip2
-            tetex dblatex nukeReferences pkgconfig sqlite git
-          ];
+            nukeReferences pkgconfig sqlite git
+          ] ++ lib.optionals pdfManual [ tetex dblatex ];
 
         configureFlags = ''
           --with-docbook-rng=${docbook5}/xml/rng/docbook
@@ -40,20 +42,20 @@ let
           (cd $sourceRoot && (git ls-files -o | xargs -r rm -v))
         '';
 
-        preConfigure = ''
+        preConfigure = lib.optionalString pdfManual ''
           # TeX needs a writable font cache.
           export VARTEXFONTS=$TMPDIR/texfonts
         '';
 
-        distPhase =
-          ''
+        distPhase = lib.optionalString pdfManual ''
             runHook preDist
+          '' + ''
             make dist
             mkdir -p $out/tarballs
             cp *.tar.* $out/tarballs
           '';
 
-        preDist = ''
+        preDist = lib.optionalString pdfManual ''
           make install docdir=$out/share/doc/nix makefiles=doc/manual/local.mk
 
           make doc/manual/manual.pdf
@@ -71,6 +73,7 @@ let
           echo "doc-pdf manual $out/manual.pdf" >> $out/nix-support/hydra-build-products
           echo "doc release-notes $out/share/doc/nix/manual release-notes.html" >> $out/nix-support/hydra-build-products
         '';
+
       };
 
 
@@ -101,7 +104,7 @@ let
 
         installFlags = "sysconfdir=$(out)/etc";
 
-        doInstallCheck = true;
+        doInstallCheck = runTests;
         installCheckFlags = "sysconfdir=$(out)/etc";
       });
 
