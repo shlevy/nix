@@ -49,6 +49,7 @@ Makefile.config
 /scripts/build-remote.pl
 /scripts/nix-reduce-build
 /scripts/nix-http-export.cgi
+/scripts/resolve-system-dependencies.pl
 
 # /src/libexpr/
 /src/libexpr/lexer-tab.cc
@@ -76,6 +77,14 @@ Makefile.config
 
 # /src/download-via-ssh/
 /src/download-via-ssh/download-via-ssh
+
+/src/build-remote/build-remote
+
+/src/nix-collect-garbage/nix-collect-garbage
+
+/src/nix-prefetch-url/nix-prefetch-url
+
+/src/nix/nix
 
 # /tests/
 /tests/test-tmp
