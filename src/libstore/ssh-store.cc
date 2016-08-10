@@ -12,10 +12,12 @@ SSHStore::SSHStore(string uri, const Params & params, size_t maxConnections)
     , socketPath((Path) tmpDir + "/ssh.sock")
     , sshMaster(startProcess([&]() {
                 auto key = get(params, "ssh-key", "");
+                auto compress = get(params, "compress", "") == "true";
+                auto flags = compress ? "-NMSC" : "-NMS";
                 if (key.empty())
-                    execlp("ssh", "ssh", "-N", "-M", "-S", socketPath.c_str(), uri.c_str(), NULL);
+                    execlp("ssh", "ssh", flags, socketPath.c_str(), uri.c_str(), NULL);
                 else
-                    execlp("ssh", "ssh", "-N", "-M", "-S", socketPath.c_str(), "-i", key.c_str(), uri.c_str(), NULL);
+                    execlp("ssh", "ssh", flags, socketPath.c_str(), "-i", key.c_str(), uri.c_str(), NULL);
                 throw SysError("starting ssh master");
       }))
     , uri(std::move(uri))

@@ -41,7 +41,6 @@ Makefile.config
 /scripts/nix-install-package
 /scripts/nix-channel
 /scripts/nix-build
-/scripts/nix-copy-closure
 /scripts/NixConfig.pm
 /scripts/NixManifest.pm
 /scripts/download-from-binary-cache.pl
@@ -81,6 +80,8 @@ Makefile.config
 /src/build-remote/build-remote
 
 /src/nix-collect-garbage/nix-collect-garbage
+
+/src/nix-copy-closure/nix-copy-closure
 
 /src/nix-prefetch-url/nix-prefetch-url
 
