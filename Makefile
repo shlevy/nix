@@ -26,7 +26,6 @@ makefiles = \
   misc/emacs/local.mk \
   doc/manual/local.mk \
   tests/local.mk
-  #src/download-via-ssh/local.mk \
 
 GLOBAL_CXXFLAGS += -std=c++11 -g -Wall
 
