@@ -17,7 +17,6 @@ makefiles = \
   src/nix-build/local.mk \
   src/nix-channel/local.mk \
   src/build-remote/local.mk \
-  perl/local.mk \
   scripts/local.mk \
   corepkgs/local.mk \
   misc/systemd/local.mk \
