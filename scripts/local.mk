@@ -1,5 +1,4 @@
 nix_bin_scripts := \
-  $(d)/nix-channel \
   $(d)/nix-copy-closure \
 
 bin-scripts += $(nix_bin_scripts)

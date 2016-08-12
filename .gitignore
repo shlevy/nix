@@ -37,7 +37,6 @@ Makefile.config
 /scripts/nix-switch
 /scripts/nix-collect-garbage
 /scripts/nix-prefetch-url
-/scripts/nix-channel
 /scripts/nix-copy-closure
 /scripts/NixConfig.pm
 /scripts/NixManifest.pm
@@ -70,6 +69,9 @@ Makefile.config
 
 # /src/nix-daemon/
 /src/nix-daemon/nix-daemon
+
+# /src/nix-channel/
+/src/nix-channel/nix-channel
 
 # /src/download-via-ssh/
 /src/download-via-ssh/download-via-ssh
