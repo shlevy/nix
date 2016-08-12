@@ -3,6 +3,8 @@
 #include "store-api.hh"
 #include "util.hh"
 #include "nar-info-disk-cache.hh"
+#include "thread-pool.hh"
+#include "derivations.hh"
 
 
 namespace nix {
@@ -506,7 +508,7 @@ namespace nix {
 RegisterStoreImplementation::Implementations * RegisterStoreImplementation::implementations = 0;
 
 
-ref<Store> openStoreAt(const std::string & uri_)
+ref<Store> openStore(const std::string & uri_)
 {
     auto uri(uri_);
     Store::Params params;
@@ -529,9 +531,22 @@ ref<Store> openStoreAt(const std::string & uri_)
 }
 
 
-ref<Store> openStore()
+StoreType getStoreType(const std::string & uri, const std::string & stateDir)
 {
-    return openStoreAt(getEnv("NIX_REMOTE"));
+    if (uri == "daemon") {
+        return tDaemon;
+    } else if (uri == "local") {
+        return tLocal;
+    } else if (uri == "") {
+        if (access(stateDir.c_str(), R_OK | W_OK) == 0)
+            return tLocal;
+        else if (pathExists(settings.nixDaemonSocketFile))
+            return tDaemon;
+        else
+            return tLocal;
+    } else {
+        return tOther;
+    }
 }
 
 
@@ -539,26 +554,14 @@ static RegisterStoreImplementation regStore([](
     const std::string & uri, const Store::Params & params)
     -> std::shared_ptr<Store>
 {
-    enum { mDaemon, mLocal, mAuto } mode;
-
-    if (uri == "daemon") mode = mDaemon;
-    else if (uri == "local") mode = mLocal;
-    else if (uri == "") mode = mAuto;
-    else return 0;
-
-    if (mode == mAuto) {
-        auto stateDir = get(params, "state", settings.nixStateDir);
-        if (access(stateDir.c_str(), R_OK | W_OK) == 0)
-            mode = mLocal;
-        else if (pathExists(settings.nixDaemonSocketFile))
-            mode = mDaemon;
-        else
-            mode = mLocal;
+    switch (getStoreType(uri, get(params, "state", settings.nixStateDir))) {
+        case tDaemon:
+            return std::shared_ptr<Store>(std::make_shared<RemoteStore>(params));
+        case tLocal:
+            return std::shared_ptr<Store>(std::make_shared<LocalStore>(params));
+        default:
+            return nullptr;
     }
-
-    return mode == mDaemon
-        ? std::shared_ptr<Store>(std::make_shared<RemoteStore>(params))
-        : std::shared_ptr<Store>(std::make_shared<LocalStore>(params));
 });
 
 
@@ -579,7 +582,7 @@ std::list<ref<Store>> getDefaultSubstituters()
     auto addStore = [&](const std::string & uri) {
         if (done.count(uri)) return;
         done.insert(uri);
-        state->stores.push_back(openStoreAt(uri));
+        state->stores.push_back(openStore(uri));
     };
 
     for (auto uri : settings.get("substituters", Strings()))
@@ -594,6 +597,57 @@ std::list<ref<Store>> getDefaultSubstituters()
     state->done = true;
 
     return state->stores;
+}
+
+
+void copyPaths(ref<Store> from, ref<Store> to, const Paths & storePaths, bool substitute)
+{
+    if (substitute) {
+        /* Filter out .drv files (we don't want to build anything). */
+        PathSet paths2;
+        for (auto & path : storePaths)
+            if (!isDerivation(path)) paths2.insert(path);
+        unsigned long long downloadSize, narSize;
+        PathSet willBuild, willSubstitute, unknown;
+        to->queryMissing(PathSet(paths2.begin(), paths2.end()),
+            willBuild, willSubstitute, unknown, downloadSize, narSize);
+        /* FIXME: should use ensurePath(), but it only
+           does one path at a time. */
+        if (!willSubstitute.empty())
+            try {
+                to->buildPaths(willSubstitute);
+            } catch (Error & e) {
+                printMsg(lvlError, format("warning: %1%") % e.msg());
+            }
+    }
+
+    std::string copiedLabel = "copied";
+
+    logger->setExpected(copiedLabel, storePaths.size());
+
+    ThreadPool pool;
+
+    processGraph<Path>(pool,
+        PathSet(storePaths.begin(), storePaths.end()),
+
+        [&](const Path & storePath) {
+            return from->queryPathInfo(storePath)->references;
+        },
+
+        [&](const Path & storePath) {
+            checkInterrupt();
+
+            if (!to->isValidPath(storePath)) {
+                Activity act(*logger, lvlInfo, format("copying ‘%s’...") % storePath);
+
+                copyStorePath(from, to, storePath);
+
+                logger->incProgress(copiedLabel);
+            } else
+                logger->incExpected(copiedLabel, -1);
+        });
+
+    pool.process();
 }
 
 

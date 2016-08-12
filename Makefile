@@ -11,10 +11,12 @@ makefiles = \
   src/nix-env/local.mk \
   src/nix-daemon/local.mk \
   src/nix-collect-garbage/local.mk \
+  src/nix-copy-closure/local.mk \
   src/nix-prefetch-url/local.mk \
   src/buildenv/local.mk \
   src/nix-build/local.mk \
   src/nix-channel/local.mk \
+  src/build-remote/local.mk \
   perl/local.mk \
   scripts/local.mk \
   corepkgs/local.mk \

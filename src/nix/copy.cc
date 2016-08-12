@@ -43,36 +43,10 @@ struct CmdCopy : StorePathsCommand
         if (srcUri.empty() && dstUri.empty())
             throw UsageError("you must pass ‘--from’ and/or ‘--to’");
 
-        ref<Store> srcStore = srcUri.empty() ? store : openStoreAt(srcUri);
-        ref<Store> dstStore = dstUri.empty() ? store : openStoreAt(dstUri);
+        ref<Store> srcStore = srcUri.empty() ? store : openStore(srcUri);
+        ref<Store> dstStore = dstUri.empty() ? store : openStore(dstUri);
 
-        std::string copiedLabel = "copied";
-
-        logger->setExpected(copiedLabel, storePaths.size());
-
-        ThreadPool pool;
-
-        processGraph<Path>(pool,
-            PathSet(storePaths.begin(), storePaths.end()),
-
-            [&](const Path & storePath) {
-                return srcStore->queryPathInfo(storePath)->references;
-            },
-
-            [&](const Path & storePath) {
-                checkInterrupt();
-
-                if (!dstStore->isValidPath(storePath)) {
-                    Activity act(*logger, lvlInfo, format("copying ‘%s’...") % storePath);
-
-                    copyStorePath(srcStore, dstStore, storePath);
-
-                    logger->incProgress(copiedLabel);
-                } else
-                    logger->incExpected(copiedLabel, -1);
-            });
-
-        pool.process();
+        copyPaths(srcStore, dstStore, storePaths);
     }
 };
 

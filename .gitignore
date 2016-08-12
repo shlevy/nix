@@ -37,7 +37,6 @@ Makefile.config
 /scripts/nix-switch
 /scripts/nix-collect-garbage
 /scripts/nix-prefetch-url
-/scripts/nix-copy-closure
 /scripts/NixConfig.pm
 /scripts/NixManifest.pm
 /scripts/download-from-binary-cache.pl
@@ -45,6 +44,7 @@ Makefile.config
 /scripts/build-remote.pl
 /scripts/nix-reduce-build
 /scripts/nix-http-export.cgi
+/scripts/resolve-system-dependencies.pl
 
 # /src/libexpr/
 /src/libexpr/lexer-tab.cc
@@ -81,6 +81,16 @@ Makefile.config
 
 # /src/nix-build/
 /src/nix-build/nix-build
+
+/src/build-remote/build-remote
+
+/src/nix-collect-garbage/nix-collect-garbage
+
+/src/nix-copy-closure/nix-copy-closure
+
+/src/nix-prefetch-url/nix-prefetch-url
+
+/src/nix/nix
 
 # /tests/
 /tests/test-tmp
