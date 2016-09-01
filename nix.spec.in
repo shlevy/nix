@@ -14,22 +14,13 @@ Source0: %{name}-%{version}.tar.xz
 %if 0%{?el5}
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 %endif
-BuildRequires: perl(DBD::SQLite)
-BuildRequires: perl(DBI)
-BuildRequires: perl(WWW::Curl)
-BuildRequires: perl(ExtUtils::ParseXS)
-Requires: /usr/bin/perl
 Requires: curl
-Requires: perl-DBD-SQLite
 Requires: bzip2
 Requires: gzip
 Requires: xz
 BuildRequires: bzip2-devel
 BuildRequires: sqlite-devel
 BuildRequires: libcurl-devel
-
-# Hack to make that shitty RPM scanning hack shut up.
-Provides: perl(Nix::SSH)
 
 %description
 Nix is a purely functional package manager. It allows multiple
@@ -87,16 +78,6 @@ Requires:       emacs-%{name} = %{version}-%{release}
 This package contains the elisp source file for the Nix major mode for
 GNU Emacs. You do not need to install this package to run Nix. Install
 the emacs-%{name} package to edit Nix expressions with GNU Emacs.
-
-
-%prep
-%setup -q
-# Install Perl modules to vendor_perl
-# configure.ac need to be changed to make this global; however, this will
-# also affect NixOS. Use discretion.
-%{__sed} -i 's|perl5/site_perl/$perlversion/$perlarchname|perl5/vendor_perl|' \
-  configure
-
 
 %build
 extraFlags=
@@ -168,8 +149,6 @@ systemctl start  nix-daemon.socket
 %files
 %{_bindir}/nix*
 %{_libdir}/*.so
-%{perl_vendorarch}/*
-%exclude %dir %{perl_vendorarch}/auto/
 %{_prefix}/libexec/*
 %if ! 0%{?rhel} || 0%{?rhel} >= 7
 %{_prefix}/lib/systemd/system/nix-daemon.socket
