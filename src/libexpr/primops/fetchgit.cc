@@ -13,9 +13,6 @@ namespace nix {
 Path exportGit(ref<Store> store, const std::string & uri,
     const std::string & ref, const std::string & rev)
 {
-    if (!isUri(uri))
-        throw EvalError(format("'%s' is not a valid URI") % uri);
-
     if (rev != "") {
         std::regex revRegex("^[0-9a-fA-F]{40}$");
         if (!std::regex_match(rev, revRegex))
