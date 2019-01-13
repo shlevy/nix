@@ -669,26 +669,8 @@ static void prim_derivationStrict(EvalState & state, const Pos & pos, Value * * 
        derivation. */
     for (auto & path : context) {
 
-        /* Paths marked with `=' denote that the path of a derivation
-           is explicitly passed to the builder.  Since that allows the
-           builder to gain access to every path in the dependency
-           graph of the derivation (including all outputs), all paths
-           in the graph must be added to this derivation's list of
-           inputs to ensure that they are available when the builder
-           runs. */
-        if (path.at(0) == '=') {
-            /* !!! This doesn't work if readOnlyMode is set. */
-            PathSet refs;
-            state.store->computeFSClosure(string(path, 1), refs);
-            for (auto & j : refs) {
-                drv.inputSrcs.insert(j);
-                if (isDerivation(j))
-                    drv.inputDrvs[j] = state.store->queryDerivationOutputNames(j);
-            }
-        }
-
         /* See prim_unsafeDiscardOutputDependency. */
-        else if (path.at(0) == '~')
+        if (path.at(0) == '~')
             drv.inputSrcs.insert(string(path, 1));
 
         /* Handle derivation outputs of the form ‘!<name>!<path>’. */
@@ -697,10 +679,27 @@ static void prim_derivationStrict(EvalState & state, const Pos & pos, Value * * 
             drv.inputDrvs[ctx.first].insert(ctx.second);
         }
 
-        /* Handle derivation contexts returned by
-           ‘builtins.storePath’. */
-        else if (isDerivation(path))
-            drv.inputDrvs[path] = state.store->queryDerivationOutputNames(path);
+        /* Paths marked with `=' denote that the path of a derivation
+           is explicitly passed to the builder.  Since that allows the
+           builder to gain access to every path in the dependency
+           graph of the derivation (including all outputs), all paths
+           in the graph must be added to this derivation's list of
+           inputs to ensure that they are available when the builder
+           runs. We also do the same to derivation contexts returned by
+           builtins.storePath and the like. */
+        else if (path.at(0) == '=' || isDerivation(path)) {
+            auto path_ = path.at(0) == '=' ?
+                string(path, 1) :
+                path;
+            /* !!! This doesn't work if readOnlyMode is set. */
+            PathSet refs;
+            state.store->computeFSClosure(path_, refs);
+            for (auto & j : refs) {
+                drv.inputSrcs.insert(j);
+                if (isDerivation(j))
+                    drv.inputDrvs[j] = state.store->queryDerivationOutputNames(j);
+            }
+        }
 
         /* Otherwise it's a source file. */
         else
